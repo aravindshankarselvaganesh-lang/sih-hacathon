@@ -1,0 +1,41 @@
+name: sulfscan_mobile
+description: "SULFSCAN - Flutter Mobile App for Colorimetric H2S Dosimeter & Refinery Worker Safety"
+publish_to: 'none'
+version: 2.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Camera & One-Shot Capture
+  camera: ^0.10.5+9
+  
+  # Barcode / 2D DataMatrix (ZXing / MobileScanner)
+  mobile_scanner: ^5.1.1
+  
+  # Offline-First Local Storage (SQLite)
+  sqflite: ^2.3.2
+  path: ^1.9.0
+  
+  # Central Backend REST Sync
+  http: ^1.2.0
+  
+  # Location & Environmental Telemetry
+  geolocator: ^11.0.0
+  
+  # UI & Formatting
+  intl: ^0.19.0
+  fl_chart: ^0.68.0
+  cupertino_icons: ^1.0.6
+  uuid: ^4.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
