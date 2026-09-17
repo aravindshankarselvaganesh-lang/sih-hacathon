@@ -1,9 +1,10 @@
 # Dependencies
 node_modules/
-*/node_modules/
+**/node_modules/
 
 # Python caches
 __pycache__/
+**/__pycache__/
 */__pycache__/
 */*/__pycache__/
 */*/*/__pycache__/
@@ -13,6 +14,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 
 # Local databases

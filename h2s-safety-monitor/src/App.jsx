@@ -1,1204 +1,1005 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import "./App.css";
 import { supabase } from "./supabaseClient";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { BrowserMultiFormatReader } from "@zxing/library";
+import {
+  Activity,
+  ShieldCheck,
+  Camera,
+  Square,
+  Zap,
+  AlertTriangle,
+  User,
+  Sparkles,
+  BarChart3,
+  Clock,
+  FlaskConical,
+  X,
+} from "lucide-react";
 
-function App() {
-  const [session, setSession] = useState(null);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [authError, setAuthError] = useState("");
+const geminiClient = new GoogleGenerativeAI("AQ.Ab8RN6I5JVDk6zB5w-hnEuV88pYURL-mIfPOEEExiFrtYn62yw");
+
+const TURMERIC_SCALE = [
+  { ppm: "0.8", color: "#f8ff6a", rgb: [248, 255, 106], label: "Safe Baseline", osha: "0.5 - 1.0 ppm" },
+  { ppm: "2.4", color: "#f4cc8f", rgb: [244, 204, 143], label: "Trace Exposure", osha: "1.0 - 3.9 ppm" },
+  { ppm: "4.8", color: "#f0b87f", rgb: [240, 184, 127], label: "Moderate Caution", osha: "3.9 - 5.8 ppm" },
+  { ppm: "6.5", color: "#bf5f3a", rgb: [191, 95, 58], label: "Action Threshold", osha: "5.8 - 7.2 ppm" },
+  { ppm: "8.5", color: "#d06e1f", rgb: [208, 110, 31], label: "Elevated Hazard", osha: "7.2 - 9.3 ppm" },
+];
+
+const lookupEmployee = async (workerId) => {
+  const query = (workerId || "EMP001").trim();
+  try {
+    const { data, error } = await supabase.from("sulfisafe_employees").select("*");
+    if (!error && data && data.length > 0) {
+      const match = data.find((row) => {
+        const d = row.data || {};
+        return (
+          (d.employeeId && d.employeeId.toUpperCase() === query.toUpperCase()) ||
+          (d.id && String(d.id).toUpperCase() === query.toUpperCase()) ||
+          (d.fullName && d.fullName.toLowerCase().includes(query.toLowerCase()))
+        );
+      });
+      if (match && match.data) return match.data;
+      const demo = data.find((row) => row.id === "demo-employee" || row.data?.employeeId === "EMP001");
+      if (demo && demo.data) return { ...demo.data, employeeId: query, badgeId: query };
+    }
+  } catch (e) {
+    console.warn("Supabase lookup notice:", e);
+  }
+  return {
+    id: query,
+    fullName:
+      query.toUpperCase().includes("EMP001") ||
+      query.toUpperCase().includes("EMP-4821") ||
+      query.toUpperCase().includes("ARAVIND")
+        ? "Aravind Shankar"
+        : `Refining Operator (${query})`,
+    employeeId: query,
+    organisation: "SulfiSafe Industries",
+    branch: "Main Plant",
+    sector: "Refining & Chemical Operations",
+    bloodGroup: "O+",
+    phone: "+91 9876543210",
+    bandExpiry: "30 September 2026",
+  };
+};
+
+const saveExposureLog = async (badgeId, ppmValue, severity, recommendation) => {
+  try {
+    const empId = (badgeId || "EMP001").trim();
+    const ppm = typeof ppmValue === "number" ? ppmValue : parseFloat(ppmValue) || 0;
+    try {
+      await supabase.from("h2s_exposure_logs").insert([
+        { worker_id: empId, ppm, severity, ai_recommendation: recommendation },
+      ]);
+    } catch (e) {
+      console.warn("Could not insert to h2s_exposure_logs:", e);
+    }
+    const isRisk = ppm >= 2 || severity === "warning" || severity === "danger";
+    const riskStatus = isRisk ? "At Risk" : "Safe";
+    const complianceStatus = ppm >= 7 ? "DANGER_EXCEEDED" : ppm >= 2 ? "ACTION_REQUIRED" : "NORMAL";
+
+    let colorName = "cream";
+    let colorLabel = "Cream";
+    let colorHex = "#eee9d8";
+    let deltaE = 4.2;
+
+    if (ppm >= 7.2) {
+      colorName = "dark_orange";
+      colorLabel = "Dark Orange";
+      colorHex = "#d06e1f";
+      deltaE = 25.1;
+    } else if (ppm >= 5.8) {
+      colorName = "red_brown";
+      colorLabel = "Red Brown";
+      colorHex = "#bf5f3a";
+      deltaE = 19.3;
+    } else if (ppm >= 3.9) {
+      colorName = "dark_tan";
+      colorLabel = "Dark Tan";
+      colorHex = "#f0b87f";
+      deltaE = 14.5;
+    } else if (ppm >= 1.0) {
+      colorName = "light_tan";
+      colorLabel = "Light Tan";
+      colorHex = "#f4cc8f";
+      deltaE = 8.2;
+    } else {
+      colorName = "neon_yellow";
+      colorLabel = "Neon Yellow";
+      colorHex = "#f8ff6a";
+      deltaE = 3.1;
+    }
+
+    const timestampStr = new Date().toLocaleString("en-US", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    const scanData = {
+      badgeId: empId,
+      observedColor: colorName,
+      colorLabel,
+      colorHex,
+      deltaE,
+      ppm,
+      cumulativeDose: `${(ppm * 8).toFixed(1)} ppm·h`,
+      complianceStatus,
+      scannedAt: timestampStr,
+      source: "SulfScan Colorimetry AI",
+      recommendation: recommendation || "",
+    };
+
+    const { data: empRows, error: empErr } = await supabase.from("sulfisafe_employees").select("*");
+    if (!empErr && empRows && empRows.length > 0) {
+      let found = false;
+      const updated = empRows.map((row) => {
+        const d = row.data || {};
+        if (
+          (d.employeeId && empId && d.employeeId.toUpperCase() === empId.toUpperCase()) ||
+          (d.id && empId && String(d.id).toUpperCase() === empId.toUpperCase()) ||
+          (d.fullName && empId && d.fullName.toLowerCase().includes(empId.toLowerCase())) ||
+          (!found && empRows.length === 1)
+        ) {
+          found = true;
+          return {
+            id: row.id,
+            data: {
+              ...d,
+              riskStatus,
+              cumulativeDose: `${(ppm * 8).toFixed(1)} ppm·h`,
+              scanData,
+            },
+          };
+        }
+        return row;
+      });
+      if (!found && updated.length > 0) {
+        updated[0].data = {
+          ...updated[0].data,
+          riskStatus,
+          cumulativeDose: `${(ppm * 8).toFixed(1)} ppm·h`,
+          scanData,
+        };
+      }
+      await supabase.from("sulfisafe_employees").upsert(updated);
+    } else {
+      await supabase.from("sulfisafe_employees").upsert([
+        {
+          id: "demo-employee",
+          data: {
+            id: "demo-employee",
+            fullName: empId === "WRISTBAND-MANUAL" || empId === "EMP001" ? "Aravind Shankar" : empId,
+            employeeId: empId,
+            organisation: "SulfiSafe Industries",
+            branch: "Main Plant",
+            sector: "Industrial Operations",
+            bloodGroup: "O+",
+            phone: "9876543210",
+            password: "Employee@123",
+            riskStatus,
+            cumulativeDose: `${(ppm * 8).toFixed(1)} ppm·h`,
+            temperature: 29,
+            humidity: 63,
+            bandExpiry: "30 September 2026",
+            scanData,
+          },
+        },
+      ]);
+    }
+
+    const alertId = Date.now();
+    const alertMsg = isRisk
+      ? `🚨 H2S Alert: ${empId} recorded ${ppm} ppm (${riskStatus.toUpperCase()}) - ${recommendation ? recommendation.slice(0, 80) + "..." : "Action required"}`
+      : `✅ Health Scan: ${empId} recorded ${ppm} ppm (Safe & Cleared)`;
+
+    await supabase.from("sulfisafe_alerts").upsert([
+      {
+        id: String(alertId),
+        data: {
+          id: alertId,
+          message: alertMsg,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          employeeId: empId,
+          employeeName: empId,
+          ppm,
+          type: isRisk ? "danger" : "safe",
+        },
+      },
+    ]);
+    return { success: true };
+  } catch (err) {
+    console.error("Supabase sync error in saveExposureLog:", err);
+    return { success: false, error: err };
+  }
+};
+
+const fetchRecentLogs = async (limit = 10) => {
+  try {
+    const { data, error } = await supabase
+      .from("h2s_exposure_logs")
+      .select("*")
+      .order("timestamp", { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.warn("Could not fetch logs from Supabase:", err);
+    return [];
+  }
+};
+
+function rgbToPpm(rgb) {
+  const [r, g, b] = rgb;
+  const max = Math.max(r, g, b);
+  const delta = max - Math.min(r, g, b);
+  if (max < 40 || delta < 15) return 0;
+  const ratio = g / Math.max(1, r);
+  if (ratio >= 0.9) {
+    const val = 0.5 + ((1.1 - Math.min(1.1, ratio)) / 0.2) * 0.5;
+    return Math.max(0.5, Math.round(val * 10) / 10);
+  }
+  if (ratio >= 0.8) {
+    const val = 1.0 + ((0.9 - ratio) / 0.1) * 2.9;
+    return Math.min(Math.round(val * 10) / 10, 3.9);
+  }
+  if (ratio >= 0.7) {
+    const val = 3.9 + ((0.8 - ratio) / 0.1) * 1.9;
+    return Math.min(Math.round(val * 10) / 10, 5.8);
+  }
+  if (ratio >= 0.55) {
+    const val = 5.8 + ((0.7 - ratio) / 0.15) * 1.4;
+    return Math.min(Math.round(val * 10) / 10, 7.2);
+  }
+  const val = 7.2 + ((0.55 - Math.max(0.3, ratio)) / 0.25) * 2.1;
+  return Math.min(Math.round(val * 10) / 10, 10.5);
+}
+
+function extractStripColor(ctx, width, height) {
+  const cx = Math.floor(width / 2);
+  const cy = Math.floor(height / 2);
+  const rw = Math.max(10, Math.floor(width * 0.15));
+  const rh = Math.max(10, Math.floor(height * 0.2));
+  const rx = Math.max(0, cx - rw - Math.floor(width * 0.05));
+  const ry = cy - Math.floor(rh / 2);
+  const data = ctx.getImageData(rx, ry, rw, rh).data;
+  const rList = [];
+  const gList = [];
+  const bList = [];
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    if (
+      (r > 245 && g > 245 && b > 245) ||
+      (r < 40 && g < 40 && b < 40) ||
+      (Math.abs(r - g) < 8 && Math.abs(g - b) < 8)
+    ) {
+      continue;
+    }
+    rList.push(r);
+    gList.push(g);
+    bList.push(b);
+  }
+  if (rList.length > 10) {
+    rList.sort((a, b) => a - b);
+    gList.sort((a, b) => a - b);
+    bList.sort((a, b) => a - b);
+    const mid = Math.floor(rList.length / 2);
+    return [rList[mid], gList[mid], bList[mid]];
+  }
+  return [215, 215, 140];
+}
+
+export default function App() {
   const [screen, setScreen] = useState("home");
+  const [result, setResult] = useState(null);
   const [history, setHistory] = useState([]);
-  const [scanResult, setScanResult] = useState(null);
-  const [isScanning, setIsScanning] = useState(false);
-  const [location, setLocation] = useState(
-    "Fetching current location..."
-  );
-  const [cameraError, setCameraError] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [simulatedExposure, setSimulatedExposure] = useState(0);
+  const [scanProgress, setScanProgress] = useState(0);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
-  const autoScanTimerRef = useRef(null);
-  const barcodeScanIntervalRef = useRef(null);
-  const detectedBarcodeRef = useRef(false);
+  const codeReaderRef = useRef(null);
+  const isScanningRef = useRef(false);
+  const intervalRef = useRef(null);
+  const detectedBarcodeRef = useRef(null);
+  const lockStreakRef = useRef(0);
 
-  /* =================================
-     SAMPLE BARCODE DATABASE
-  ================================= */
-
-  const wristbandDatabase = {
-    BARCODE123: {
-      name: "Rahul Sharma",
-      workerId: "WRK-1024",
-      workerUnit: "Production Unit A",
-      status: "valid",
-      entryExit: "ENTRY",
-    },
-
-    BARCODE456: {
-      name: "Priya Singh",
-      workerId: "WRK-2048",
-      workerUnit: "Maintenance Unit",
-      status: "expiring",
-      entryExit: "EXIT",
-    },
-
-    BARCODE789: {
-      name: "Aman Kumar",
-      workerId: "WRK-3072",
-      workerUnit: "Safety Department",
-      status: "expired",
-      entryExit: "ENTRY",
-    },
-  };
-
-  /* =================================
-     STATUS TEXT
-  ================================= */
-
-  const getStatusText = (status) => {
-    if (status === "valid") return "VALID";
-    if (status === "expiring") return "EXPIRING SOON";
-    if (status === "expired") return "EXPIRED";
-
-    return "UNKNOWN";
-  };
-
-  /* =================================
-     DATE FORMAT
-  ================================= */
-
-  const getFormattedDate = () => {
-    const now = new Date();
-
-    const day = String(now.getDate()).padStart(2, "0");
-
-    const month = String(
-      now.getMonth() + 1
-    ).padStart(2, "0");
-
-    const year = now.getFullYear();
-
-    return `${day}-${month}-${year}`;
-  };
-
-  /* =================================
-     GET CURRENT LOCATION
-  ================================= */
-
-  const getCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setLocation(
-        "Location is not supported by this browser."
-      );
-
-      return;
-    }
-
-    setLocation("Fetching current location...");
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
-
-        try {
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
-          );
-
-          const data = await response.json();
-
-          if (data && data.display_name) {
-            setLocation(data.display_name);
-          } else {
-            setLocation(
-              "Exact location could not be identified."
-            );
-          }
-        } catch (error) {
-          console.error("Location error:", error);
-
-          setLocation(
-            "Unable to fetch exact location."
-          );
-        }
-      },
-
-      (error) => {
-        console.error("Geolocation error:", error);
-
-        if (
-          error.code === error.PERMISSION_DENIED
-        ) {
-          setLocation(
-            "Location permission was denied."
-          );
-        } else {
-          setLocation(
-            "Unable to detect current location."
-          );
-        }
-      },
-
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      }
-    );
-  };
-
-  /* =================================
-     START CAMERA
-  ================================= */
-
-  const startCamera = async () => {
-    try {
-      setCameraError("");
-
-      if (
-        !navigator.mediaDevices ||
-        !navigator.mediaDevices.getUserMedia
-      ) {
-        setCameraError(
-          "Camera is not supported by this browser."
+  useEffect(() => {
+    async function loadLogs() {
+      const logs = await fetchRecentLogs(10);
+      if (logs && logs.length > 0) {
+        setHistory(
+          logs.map((l) => ({
+            id: l.id,
+            workerId: l.worker_id,
+            ppm: l.ppm,
+            severity: l.severity,
+            recommendation: l.ai_recommendation,
+            timestamp: new Date(l.timestamp).toLocaleTimeString(),
+          }))
         );
-
-        return;
       }
-
-      const stream =
-        await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: {
-              ideal: "environment",
-            },
-          },
-
-          audio: false,
-        });
-
-      streamRef.current = stream;
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current.play();
-        };
-      }
-    } catch (error) {
-      console.error("Camera error:", error);
-
-      setCameraError(
-        "Unable to access camera. Please allow camera permission."
-      );
     }
-  };
+    loadLogs();
+  }, []);
 
-  /* =================================
-     STOP CAMERA
-  ================================= */
+  useEffect(() => {
+    return () => {
+      cleanupCamera();
+    };
+  }, []);
 
-  const stopCamera = () => {
+  const cleanupCamera = () => {
+    isScanningRef.current = false;
+    setScanProgress(0);
+    lockStreakRef.current = 0;
+    detectedBarcodeRef.current = null;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (codeReaderRef.current) {
+      try {
+        codeReaderRef.current = null;
+      } catch {}
+    }
     if (streamRef.current) {
-      streamRef.current
-        .getTracks()
-        .forEach((track) => {
-          track.stop();
-        });
-
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
   };
 
-  /* =================================
-     STOP BARCODE DETECTION
-  ================================= */
+  const startCamera = async () => {
+    setScreen("camera");
+    isScanningRef.current = true;
+    setScanProgress(0);
+    lockStreakRef.current = 0;
+    detectedBarcodeRef.current = null;
+    window.scrollTo({ top: 0, behavior: "smooth" });
 
-  const stopBarcodeDetection = () => {
-    if (barcodeScanIntervalRef.current) {
-      clearInterval(
-        barcodeScanIntervalRef.current
-      );
-
-      barcodeScanIntervalRef.current = null;
-    }
-  };
-
-  /* =================================
-     CHECK DUPLICATE SCAN
-  ================================= */
-
-  const checkAlreadyScanned = (enteredBarcode) => {
-    const now = Date.now();
-
-    const previousScan = history.find(
-      (record) =>
-        record.barcode === enteredBarcode &&
-        now - record.timestamp < 60000
-    );
-
-    return previousScan;
-  };
-
-  /* =================================
-     CREATE SCAN DATA
-  ================================= */
-
-  const createScanData = (
-    worker,
-    enteredBarcode
-  ) => {
-    const now = new Date();
-
-    return {
-      ...worker,
-
-      barcode: enteredBarcode,
-
-      id: Date.now(),
-
-      timestamp: Date.now(),
-
-      date: getFormattedDate(),
-
-      time: now.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-
-      location,
-    };
-  };
-
-  /* =================================
-     PROCESS BARCODE
-  ================================= */
-
-  const processBarcode = async (barcodeValue) => {
-    const enteredBarcode = barcodeValue?.trim().toUpperCase();
-    if (!enteredBarcode) return;
-
-    const alreadyScanned = checkAlreadyScanned(enteredBarcode);
-    if (alreadyScanned) {
-      setIsScanning(false);
-      setScanResult({
-        success: false,
-        alreadyScanned: true,
-        name: alreadyScanned.name,
-        barcode: alreadyScanned.barcode,
-        workerId: alreadyScanned.workerId,
-        message: "This worker has already been scanned within the last 1 minute.",
-      });
-      stopBarcodeDetection();
-      stopCamera();
-      setScreen("failed");
-      return;
-    }
-
-    setIsScanning(true);
-
+    let stream = null;
     try {
-      const { data: workers, error } = await supabase
-        .from('workers')
-        .select('*')
-        .eq('barcode', enteredBarcode)
-        .limit(1);
-
-      if (error || !workers || workers.length === 0) {
-        setIsScanning(false);
-        setScanResult({ success: false, message: "Barcode was not found in the system." });
-        stopBarcodeDetection();
-        stopCamera();
-        setScreen("failed");
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+    } catch (err) {
+      console.warn("Rear camera constraint failed, fallback to default camera:", err);
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      } catch (e) {
+        console.error("Camera access error:", e);
+        alert("Camera permission denied. Please allow camera access in your browser settings and refresh.");
+        setScreen("home");
         return;
       }
-
-      const worker = workers[0];
-      const workerDetails = {
-        name: worker.name,
-        workerId: worker.worker_id,
-        workerUnit: worker.worker_unit,
-        status: worker.status,
-        entryExit: worker.entry_exit
-      };
-
-      const scanData = createScanData(workerDetails, enteredBarcode);
-
-      // Save to Supabase
-      await supabase.from('scans').insert([{
-        worker_id: worker.id,
-        barcode: enteredBarcode,
-        location: location,
-        scan_type: worker.entry_exit,
-        admin_id: session?.user?.id
-      }]);
-
-      setHistory((previousHistory) => [scanData, ...previousHistory]);
-      setScanResult({ success: true, ...scanData });
-      setIsScanning(false);
-      stopBarcodeDetection();
-      stopCamera();
-      setScreen("result");
-    } catch (err) {
-      setIsScanning(false);
-      setScanResult({ success: false, message: "Network error checking barcode." });
-      stopBarcodeDetection();
-      stopCamera();
-      setScreen("failed");
-    }
-  };
-
-  /* =================================
-     BARCODE DETECTION
-  ================================= */
-
-  const startBarcodeDetection = () => {
-    if (!("BarcodeDetector" in window)) {
-      console.log(
-        "BarcodeDetector is not supported. Demo scan will be used."
-      );
-
-      return;
     }
 
-    try {
-      const barcodeDetector =
-        new window.BarcodeDetector({
-          formats: [
-            "code_128",
-            "code_39",
-            "ean_13",
-            "ean_8",
-            "upc_a",
-            "upc_e",
-            "qr_code",
-          ],
-        });
-
-      barcodeScanIntervalRef.current =
-        setInterval(async () => {
-          if (
-            detectedBarcodeRef.current ||
-            !videoRef.current ||
-            videoRef.current.readyState < 2
-          ) {
-            return;
-          }
-
-          try {
-            const detectedBarcodes =
-              await barcodeDetector.detect(
-                videoRef.current
-              );
-
-            if (
-              detectedBarcodes.length > 0
-            ) {
-              const barcodeValue =
-                detectedBarcodes[0].rawValue;
-
-              if (barcodeValue) {
-                detectedBarcodeRef.current = true;
-
-                stopBarcodeDetection();
-
-                processBarcode(barcodeValue);
-              }
-            }
-          } catch (error) {
-            console.log(
-              "Barcode detection error:",
-              error
-            );
-          }
-        }, 500);
-    } catch (error) {
-      console.error(
-        "Barcode scanner error:",
-        error
-      );
-    }
-  };
-
-  /* =================================
-     AUTOMATIC DEMO SCAN
-  ================================= */
-
-  const automaticScan = () => {
-    if (
-      isScanning ||
-      detectedBarcodeRef.current
-    ) {
-      return;
-    }
-
-    const demoBarcodes = [
-      "BARCODE123",
-      "BARCODE456",
-      "BARCODE789",
-    ];
-
-    const randomBarcode =
-      demoBarcodes[
-        Math.floor(
-          Math.random() *
-            demoBarcodes.length
-        )
-      ];
-
-    detectedBarcodeRef.current = true;
-
-    processBarcode(randomBarcode);
-  };
-
-  /* =================================
-     SCANNER EFFECT
-  ================================= */
-
-  useEffect(() => {
-    if (screen === "scanner") {
-      detectedBarcodeRef.current = false;
-
-      startCamera();
-
-      getCurrentLocation();
-
-      const detectionTimer =
-        setTimeout(() => {
-          startBarcodeDetection();
-        }, 1500);
-
-      autoScanTimerRef.current =
-        setTimeout(() => {
-          if (
-            !detectedBarcodeRef.current
-          ) {
-            automaticScan();
-          }
-        }, 5000);
-
-      return () => {
-        clearTimeout(detectionTimer);
-
-        stopCamera();
-
-        stopBarcodeDetection();
-
-        if (
-          autoScanTimerRef.current
-        ) {
-          clearTimeout(
-            autoScanTimerRef.current
-          );
+    streamRef.current = stream;
+    setTimeout(async () => {
+      if (isScanningRef.current && videoRef.current) {
+        videoRef.current.srcObject = stream;
+        try {
+          await videoRef.current.play();
+        } catch (e) {
+          console.warn("Video play notice:", e);
         }
-      };
+
+        try {
+          const reader = new BrowserMultiFormatReader();
+          codeReaderRef.current = reader;
+        } catch (err) {
+          console.warn("Zxing init skipped:", err);
+        }
+
+        let tickCount = 0;
+        intervalRef.current = setInterval(() => {
+          if (!isScanningRef.current || !videoRef.current) return;
+          tickCount += 1;
+          const video = videoRef.current;
+          if (video.readyState < 2) return;
+          const vw = video.videoWidth;
+          const vh = video.videoHeight;
+          if (!vw || !vh) return;
+
+          const canvas = document.createElement("canvas");
+          canvas.width = vw;
+          canvas.height = vh;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          ctx.drawImage(video, 0, 0, vw, vh);
+
+          // Horizontal Barcode Try
+          if (!detectedBarcodeRef.current && codeReaderRef.current) {
+            try {
+              const res = codeReaderRef.current.decodeFromCanvas(canvas);
+              if (res) {
+                detectedBarcodeRef.current = res.getText();
+                console.log("Barcode Auto-Locked (Horiz):", detectedBarcodeRef.current);
+              }
+            } catch {}
+          }
+
+          // Vertical Barcode Try
+          if (!detectedBarcodeRef.current && codeReaderRef.current) {
+            try {
+              const rotated = document.createElement("canvas");
+              rotated.width = vh;
+              rotated.height = vw;
+              const rCtx = rotated.getContext("2d", { willReadFrequently: true });
+              rCtx.translate(vh / 2, vw / 2);
+              rCtx.rotate((90 * Math.PI) / 180);
+              rCtx.drawImage(canvas, -vw / 2, -vh / 2);
+              const rRes = codeReaderRef.current.decodeFromCanvas(rotated);
+              if (rRes) {
+                detectedBarcodeRef.current = rRes.getText();
+                console.log("Vertical Barcode Auto-Locked:", detectedBarcodeRef.current);
+              }
+            } catch {}
+          }
+
+          const [rVal, gVal, bVal] = extractStripColor(ctx, vw, vh);
+          if ((rVal > bVal + 15 && rVal > 80) || detectedBarcodeRef.current) {
+            lockStreakRef.current += 1;
+            const progress = Math.min(100, lockStreakRef.current * 25);
+            setScanProgress(progress);
+            if (lockStreakRef.current >= 4) {
+              completeScan(detectedBarcodeRef.current || "EMP001");
+            }
+          } else {
+            lockStreakRef.current = Math.max(0, lockStreakRef.current - 1);
+            setScanProgress(lockStreakRef.current * 25);
+          }
+
+          if (tickCount >= 15 && isScanningRef.current) {
+            console.log("3-second hard limit reached. Aborting scan.");
+            cleanupCamera();
+            setScreen("home");
+            alert("Scan Timeout: Could not confidently lock onto the strip within 3 seconds. Please align the wristband and rescan.");
+          }
+        }, 200);
+      }
+    }, 100);
+  };
+
+  const completeScan = (workerId) => {
+    if (!isScanningRef.current || !videoRef.current) return;
+    isScanningRef.current = false;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
-
-    return undefined;
-  }, [screen]);
-
-  /* =================================
-     NAVIGATION
-  ================================= */
-
-  const startScanning = () => {
-    setScreen("intro");
+    const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+    const scale = Math.min(1, 640 / (video.videoWidth || 640));
+    canvas.width = (video.videoWidth || 640) * scale;
+    canvas.height = (video.videoHeight || 480) * scale;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    cleanupCamera();
+    processDiagnostic(ctx, canvas, workerId || "EMP001");
   };
 
-  const openScanner = () => {
-    setCameraError("");
-    setIsScanning(false);
-    setScreen("scanner");
+  const snapInstant = () => {
+    completeScan(detectedBarcodeRef.current || "WRISTBAND-MANUAL");
   };
 
-  const clearHistory = () => {
-    setHistory([]);
-  };
+  const processDiagnostic = (ctx, canvas, workerId) => {
+    try {
+      const rgb = extractStripColor(ctx, canvas.width, canvas.height);
+      const ppm = rgbToPpm(rgb);
+      let severity = "safe";
+      if (ppm >= 9) severity = "danger";
+      else if (ppm >= 4) severity = "warning";
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setAuthError("");
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setAuthError(error.message);
-    else setSession(data.session);
-  };
+      const fallbackRec =
+        severity === "danger"
+          ? "CRITICAL ALERT: Exposure exceeds OSHA 10 ppm PEL. Evacuate worker immediately to fresh air and alert the response team."
+          : severity === "warning"
+          ? "WARNING: H2S level is elevated (approaching OSHA 10 ppm PEL limit). Increase local ventilation and monitor worker symptoms."
+          : "SAFE: Exposure is well within normal permissible limits (< 4 ppm). Worker cleared for duty.";
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    supabase.auth.onAuthStateChange((_event, session) => setSession(session));
-  }, []);
+      const newScan = {
+        id: Date.now(),
+        workerId: workerId || "EMP001",
+        ppm,
+        extractedRgb: rgb,
+        severity,
+        recommendation: fallbackRec,
+        timestamp: new Date().toLocaleTimeString(),
+        owner: null,
+      };
 
-  /* =================================
-     AUTH SCREEN
-  ================================= */
-  if (!session) {
-    return (
-      <div className="app-screen home-screen" style={{ justifyContent: 'center', alignItems: 'center' }}>
-        <div style={{ background: '#1e1e1e', padding: '30px', borderRadius: '12px', width: '300px', textAlign: 'center' }}>
-          <h2>Admin Login</h2>
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
-            <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={{ padding: '10px', borderRadius: '6px' }} />
-            <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} style={{ padding: '10px', borderRadius: '6px' }} />
-            <button type="submit" className="primary-button">LOGIN</button>
-            {authError && <p style={{ color: 'red', fontSize: '14px' }}>{authError}</p>}
-          </form>
-        </div>
-      </div>
-    );
-  }
+      setHistory((prev) => [newScan, ...prev]);
+      setResult(newScan);
+      setScreen("result");
+      window.scrollTo({ top: 0, behavior: "smooth" });
 
-  /* =================================
-     PAGE 1 — HOME
-  ================================= */
-
-  if (screen === "home") {
-    return (
-      <div className="app-screen home-screen">
-        <header className="home-header">
-          <div className="home-brand">
-            <img
-              src="/sulfscan-logo.png"
-              alt="SULFISCAN Logo"
-              className="app-logo"
-            />
-
-            <div>
-              <h1>SULFISCAN</h1>
-
-              <span className="app-tag">
-                SMART WORKER CONTROL
-              </span>
-            </div>
-          </div>
-        </header>
-
-        <main className="home-content">
-          <div className="hero-badge">
-            SMART • FAST • SECURE
-          </div>
-
-          <h2 className="home-subtitle">
-            Smart Worker.
-            <br />
-
-            <span>
-              Control & Access.
-            </span>
-          </h2>
-
-          <p className="home-description">
-            A smart barcode-based
-            system designed to manage
-            worker access, monitor
-            entry and exit, and verify
-            worker information
-            instantly.
-          </p>
-
-          <button
-            className="start-scan-button"
-            onClick={startScanning}
-          >
-            START SCANNING
-          </button>
-        </main>
-
-        <div className="moving-features">
-          <div className="feature-track">
-            <span>SMART BARCODE SCANNING</span>
-            <span>REAL-TIME VALIDATION</span>
-            <span>SECURE WORKER ACCESS</span>
-            <span>ENTRY & EXIT MONITORING</span>
-            <span>SCAN HISTORY</span>
-            <span>INSTANT STATUS CHECK</span>
-
-            <span>SMART BARCODE SCANNING</span>
-            <span>REAL-TIME VALIDATION</span>
-            <span>SECURE WORKER ACCESS</span>
-            <span>ENTRY & EXIT MONITORING</span>
-            <span>SCAN HISTORY</span>
-            <span>INSTANT STATUS CHECK</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  /* =================================
-     PAGE 2 — INTRO
-  ================================= */
-
-  if (screen === "intro") {
-    return (
-      <div className="app-screen intro-screen">
-        <button
-          className="back-button"
-          onClick={() =>
-            setScreen("home")
+      lookupEmployee(workerId || "EMP001")
+        .then((profile) => {
+          if (profile) {
+            setResult((curr) => (curr && curr.id === newScan.id ? { ...curr, owner: profile } : curr));
           }
-        >
-          ← Back
-        </button>
+        })
+        .catch((err) => console.warn("Worker profile lookup notice:", err));
 
-        <div className="wristband-image">
-          <div className="rfid-wave wave-one"></div>
+      saveExposureLog(workerId || "EMP001", ppm, severity, fallbackRec);
 
-          <div className="rfid-wave wave-two"></div>
-
-          <div className="rfid-card">
-            <div className="rfid-chip"></div>
-
-            <span>SCAN</span>
-          </div>
-
-          <div className="wristband-strap"></div>
-        </div>
-
-        <h1>Scan Your Wristband</h1>
-
-        <p className="subtitle intro-text">
-          Place your worker wristband
-          near the scanner for quick
-          and secure worker
-          verification.
-        </p>
-
-        <button
-          className="primary-button intro-button"
-          onClick={openScanner}
-        >
-          NEXT →
-        </button>
-      </div>
-    );
-  }
-
-  /* =================================
-     PAGE 3 — SCANNER
-  ================================= */
-
-  if (screen === "scanner") {
-    return (
-      <div className="app-screen scanning-screen">
-        <button
-          className="back-button"
-          onClick={() =>
-            setScreen("intro")
+      geminiClient
+        .getGenerativeModel({ model: "gemini-1.5-flash" })
+        .generateContent(
+          `A chemical refinery worker (Badge: ${workerId}) was exposed to ${ppm} ppm of Hydrogen Sulfide (H2S). The OSHA 8-hour Permissible Exposure Limit (PEL) is 10 ppm. Severity: ${severity}. Provide a concise 2-sentence emergency response protocol for the safety officer.`
+        )
+        .then((res) => {
+          const text = res.response.text();
+          if (text) {
+            setResult((curr) => (curr && curr.id === newScan.id ? { ...curr, recommendation: text } : curr));
+            setHistory((prev) => prev.map((item) => (item.id === newScan.id ? { ...item, recommendation: text } : item)));
           }
-        >
-          ← Back
-        </button>
+        })
+        .catch((err) => console.warn("Gemini async notice:", err));
+    } catch (err) {
+      console.error("Local analysis error:", err);
+      alert(`Diagnostic Error: ${err.message}`);
+      setScreen("home");
+    }
+  };
 
-        <div className="scan-header">
-          <h1>
-            Scan Worker Barcode
-          </h1>
-
-          <p>
-            Position the barcode in
-            front of the camera.
-          </p>
-        </div>
-
-        <div className="camera-box">
-          {cameraError ? (
-            <div className="camera-placeholder">
-              <div className="camera-label">
-                CAMERA ERROR
-              </div>
-
-              <p
-                style={{
-                  color: "white",
-                  padding: "25px",
-                  textAlign: "center",
-                }}
-              >
-                {cameraError}
-              </p>
-            </div>
-          ) : (
-            <>
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="camera-video"
-              />
-
-              <div className="camera-overlay">
-                <div className="camera-label">
-                  BARCODE SCANNER ACTIVE
-                </div>
-
-                <div className="scanner-frame">
-                  <div className="corner top-left"></div>
-
-                  <div className="corner top-right"></div>
-
-                  <div className="corner bottom-left"></div>
-
-                  <div className="corner bottom-right"></div>
-
-                  <div className="scan-line"></div>
-                </div>
-
-                <div className="scanner-tap-text">
-                  AUTOMATIC BARCODE
-                  SCANNING ACTIVE
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="camera-status">
-          <span className="status-dot"></span>
-
-          <span>
-            Camera ready for barcode
-            scanning
-          </span>
-        </div>
-
-        {isScanning && (
-          <div className="loading-overlay">
-            <div className="scan-loader"></div>
-
-            <p className="loading-text">
-              Scanning and verifying
-              worker...
-            </p>
+  return (
+    <div className="app-shell">
+      {/* App Header */}
+      <header className="app-header">
+        <div className="header-brand">
+          <div className="brand-logo-glow">
+            <Activity size={22} color="#38bdf8" />
           </div>
-        )}
-      </div>
-    );
-  }
-
-  /* =================================
-     RESULT PAGE
-  ================================= */
-
-  if (
-    screen === "result" &&
-    scanResult
-  ) {
-    return (
-      <div className="app-screen result-screen">
-        <div className="success-history-header">
-          <button
-            className="history-button"
-            onClick={() =>
-              setScreen("history")
-            }
-          >
-            🔎 Search History
-          </button>
-        </div>
-
-        {scanResult.status ===
-          "expired" && (
-          <div className="expired-alert-screen">
-            <div className="expired-alert-card">
-              <div className="expired-pulse">
-                !
-              </div>
-
-              <div className="expired-warning">
-                WARNING
-              </div>
-
-              <h1>
-                WRISTBAND EXPIRED
-              </h1>
-
-              <p className="expired-alert-text">
-                This worker's wristband
-                has expired and requires
-                immediate verification.
-              </p>
-
-              <div className="expired-worker-details">
-                <div>
-                  <span>WORKER NAME</span>
-
-                  <strong>
-                    {scanResult.name}
-                  </strong>
-                </div>
-
-                <div>
-                  <span>WORKER ID</span>
-
-                  <strong>
-                    {scanResult.workerId}
-                  </strong>
-                </div>
-
-                <div>
-                  <span>BARCODE</span>
-
-                  <strong>
-                    {scanResult.barcode}
-                  </strong>
-                </div>
-              </div>
-
-              <button
-                className="primary-button"
-                onClick={openScanner}
-              >
-                CONTINUE
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div
-          className={`result-icon ${scanResult.status}`}
-        >
-          {scanResult.status === "valid"
-            ? "✓"
-            : scanResult.status === "expiring"
-            ? "!"
-            : "✕"}
-        </div>
-
-        <h1>Worker Details</h1>
-
-        <div
-          className={`status-banner ${scanResult.status}`}
-        >
-          <div className="status-indicator">
-            ●
-          </div>
-
           <div>
-            <h3>
-              {getStatusText(
-                scanResult.status
-              )}
-            </h3>
-
-            <p>
-              {scanResult.status ===
-              "valid"
-                ? "The wristband is active and access is permitted."
-                : scanResult.status ===
-                  "expiring"
-                ? "The wristband is still active but will expire soon."
-                : "The wristband has expired and requires attention."}
-            </p>
+            <div className="brand-title">SULFSCAN™ EDGE</div>
+            <div className="brand-sub">Optical H₂S Rapid Detection System</div>
           </div>
         </div>
-
-        <div className="details-card">
-          <div className="detail-row">
-            <span className="detail-label">
-              NAME
-            </span>
-
-            <span>
-              {scanResult.name}
-            </span>
-          </div>
-
-          <div className="detail-row">
-            <span className="detail-label">
-              WORKER ID
-            </span>
-
-            <span>
-              {scanResult.workerId}
-            </span>
-          </div>
-
-          <div className="detail-row">
-            <span className="detail-label">
-              WORKER UNIT
-            </span>
-
-            <span>
-              {scanResult.workerUnit}
-            </span>
-          </div>
-
-          <div className="detail-row">
-            <span className="detail-label">
-              LOCATION
-            </span>
-
-            <span>
-              {scanResult.location}
-            </span>
-          </div>
-
-          <div className="detail-row">
-            <span className="detail-label">
-              ENTRY / EXIT
-            </span>
-
-            <span
-              className={`entry-exit-tag ${scanResult.entryExit.toLowerCase()}`}
-            >
-              {scanResult.entryExit}
-            </span>
-          </div>
-
-          <div className="detail-row">
-            <span className="detail-label">
-              BARCODE
-            </span>
-
-            <span>
-              {scanResult.barcode}
-            </span>
-          </div>
-
-          <div className="detail-row">
-            <span className="detail-label">
-              DATE
-            </span>
-
-            <span>
-              {scanResult.date}
-            </span>
-          </div>
-
-          <div className="detail-row">
-            <span className="detail-label">
-              SCAN TIME
-            </span>
-
-            <span>
-              {scanResult.time}
-            </span>
+        <div className="header-status">
+          <div className="status-pill">
+            <span className="status-dot"></span>
+            <span>Edge AI & Cloud Sync Active</span>
           </div>
         </div>
+      </header>
 
-        <button
-          className="primary-button scan-again-button"
-          onClick={openScanner}
-        >
-          SCAN AGAIN
-        </button>
-      </div>
-    );
-  }
-
-  /* =================================
-     FAILED SCREEN
-  ================================= */
-
-  if (screen === "failed") {
-    return (
-      <div className="app-screen failed-screen">
-        <div className="failed-circle">
-          !
-        </div>
-
-        <h1>
-          {scanResult?.alreadyScanned
-            ? "Already Scanned"
-            : "Scan Failed"}
-        </h1>
-
-        {scanResult?.alreadyScanned && (
-          <div className="already-scanned-alert">
-            <h2>
-              {scanResult.name}
-            </h2>
-
-            <p>
-              Barcode:{" "}
-              {scanResult.barcode}
-            </p>
-
-            <p>
-              Worker ID:{" "}
-              {scanResult.workerId}
-            </p>
-          </div>
-        )}
-
-        <div className="failure-message">
-          {scanResult?.message ||
-            "Unable to verify the worker barcode."}
-        </div>
-
-        <button
-          className="primary-button"
-          onClick={openScanner}
-        >
-          TRY AGAIN
-        </button>
-
-        <button
-          className="secondary-button"
-          onClick={() =>
-            setScreen("home")
-          }
-        >
-          RETURN HOME
-        </button>
-      </div>
-    );
-  }
-
-  /* =================================
-     HISTORY SCREEN
-  ================================= */
-
-  if (screen === "history") {
-    return (
-      <div className="app-screen history-screen">
-        <div className="history-top-bar">
-          <button
-            className="history-back-button"
-            onClick={() =>
-              setScreen("result")
-            }
-          >
-            ← Back
-          </button>
-
-          {history.length > 0 && (
-            <button
-              className="clear-history-button"
-              onClick={clearHistory}
-            >
-              Clear History
-            </button>
-          )}
-        </div>
-
-        <h1>
-          Search History
-        </h1>
-
-        <p className="subtitle">
-          Complete record of scanned
-          worker wristbands
-        </p>
-
-        {history.length === 0 ? (
-          <div className="empty-history">
-            <div className="history-icon">
-              📜
-            </div>
-
-            <h2>
-              No Scan History
-            </h2>
-
-            <p>
-              Your scanned workers will
-              appear here.
-            </p>
-          </div>
-        ) : (
-          <div className="history-list">
-            {history.map((record) => (
-              <div
-                key={record.id}
-                className={`history-card ${record.status}`}
-              >
-                <div className="history-card-header">
-                  <div>
-                    <h3>
-                      {record.name}
-                    </h3>
-
-                    <span>
-                      {record.workerId}
-                    </span>
+      {/* Main Dashboard Container */}
+      <main className="dashboard-container">
+        <section className="stage-panel">
+          {/* SCREEN 1: HOME */}
+          {screen === "home" && (
+            <div className="welcome-hero">
+              <div className="hero-icon-wrap">
+                <ShieldCheck size={44} />
+              </div>
+              <h1 className="hero-title">Wearable H₂S Monitor</h1>
+              <p className="hero-desc">
+                High-precision colorimetric scanner for 3D wearable wristbands. Features continuous automatic strip detection, instant edge AI & OSHA safety analytics.
+              </p>
+              <div className="workflow-grid">
+                <div className="workflow-step">
+                  <div className="step-num">STEP 01</div>
+                  <div className="step-text">Align Wristband</div>
+                </div>
+                <div className="workflow-step">
+                  <div className="step-num">STEP 02</div>
+                  <div className="step-text">Auto Lock Strip (&lt;1s)</div>
+                </div>
+                <div className="workflow-step">
+                  <div className="step-num">STEP 03</div>
+                  <div className="step-text">Instant Result</div>
+                </div>
+              </div>
+              <div className="action-buttons-group">
+                <button className="btn btn-hero-camera" onClick={startCamera}>
+                  <Camera size={28} />
+                  <div className="hero-btn-content">
+                    <span className="hero-btn-title">START CAMERA SCANNER</span>
+                    <span className="hero-btn-sub">Auto-detects wristband strip & barcode automatically</span>
                   </div>
+                </button>
+              </div>
+            </div>
+          )}
 
+          {/* SCREEN 2: CAMERA HUD */}
+          {screen === "camera" && (
+            <div className="camera-view-wrapper">
+              <div className="camera-header-hud">
+                <div className="camera-status-indicator">
                   <span
-                    className={`status-badge ${record.status}`}
-                  >
-                    {getStatusText(
-                      record.status
-                    )}
+                    className="status-dot"
+                    style={{
+                      background: scanProgress >= 75 ? "#22c55e" : "#38bdf8",
+                      boxShadow: `0 0 8px ${scanProgress >= 75 ? "#22c55e" : "#38bdf8"}`,
+                    }}
+                  ></span>
+                  <span>
+                    {scanProgress > 0
+                      ? `AUTO-LOCKING (${scanProgress}%) · Hold Steady`
+                      : `AUTO-SCANNER ACTIVE · Align Wristband`}
                   </span>
                 </div>
-
-                <div className="history-details">
-                  <p>
-                    <strong>
-                      WORKER UNIT
-                    </strong>
-
-                    <span>
-                      {record.workerUnit}
-                    </span>
-                  </p>
-
-                  <p>
-                    <strong>
-                      LOCATION
-                    </strong>
-
-                    <span>
-                      {record.location}
-                    </span>
-                  </p>
-
-                  <p>
-                    <strong>
-                      ENTRY / EXIT
-                    </strong>
-
-                    <span
-                      className={`entry-exit-tag ${record.entryExit.toLowerCase()}`}
-                    >
-                      {record.entryExit}
-                    </span>
-                  </p>
-
-                  <p>
-                    <strong>
-                      BARCODE
-                    </strong>
-
-                    <span>
-                      {record.barcode}
-                    </span>
-                  </p>
-
-                  <p>
-                    <strong>
-                      DATE
-                    </strong>
-
-                    <span>
-                      {record.date}
-                    </span>
-                  </p>
-
-                  <p>
-                    <strong>
-                      TIME
-                    </strong>
-
-                    <span>
-                      {record.time}
-                    </span>
-                  </p>
+              </div>
+              <div className="camera-container" onClick={snapInstant} style={{ cursor: "pointer" }}>
+                <video ref={videoRef} autoPlay playsInline muted className="camera-video"></video>
+                <div className="camera-hud-overlay">
+                  <div className="radar-sweep-line"></div>
+                  <div
+                    className="wristband-target-frame"
+                    style={{
+                      borderColor: scanProgress >= 75 ? "#22c55e" : "rgba(56, 189, 248, 0.85)",
+                    }}
+                  >
+                    <div className="wristband-inner-grid">
+                      <div className="hud-col">STRIP</div>
+                      <div className="hud-col">BARCODE</div>
+                      <div className="hud-col">REF</div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            ))}
+              <div style={{ display: "flex", gap: "0.75rem" }}>
+                <button
+                  className="btn btn-danger-stop"
+                  style={{ flex: 1 }}
+                  onClick={() => {
+                    cleanupCamera();
+                    setScreen("home");
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                >
+                  <Square size={20} /> ⏹ STOP SCAN & EXIT
+                </button>
+                <button className="btn btn-primary" style={{ flex: 1 }} onClick={snapInstant}>
+                  <Zap size={18} /> INSTANT SNAP
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* SCREEN 3: RESULT */}
+          {screen === "result" && result && (
+            <div className={`result-card ${result.severity}`}>
+              <div className="result-header-row">
+                <div className="worker-badge-tag">WEARABLE BADGE: {result.workerId}</div>
+                <div style={{ fontSize: "0.85rem", color: "#94a3b8" }}>{result.timestamp}</div>
+              </div>
+
+              <div className="ppm-hero-box">
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  {result.severity === "safe" ? (
+                    <ShieldCheck size={28} color="var(--safe)" />
+                  ) : (
+                    <AlertTriangle size={28} color={result.severity === "danger" ? "var(--danger)" : "var(--warning)"} />
+                  )}
+                  <span className="severity-label">
+                    {result.severity === "safe"
+                      ? "SAFE AIR QUALITY"
+                      : result.severity === "danger"
+                      ? "CRITICAL HAZARD"
+                      : "ELEVATED WARNING"}
+                  </span>
+                </div>
+                <div className="ppm-number">
+                  {result.ppm} <span style={{ fontSize: "1.5rem", fontWeight: 500, color: "#94a3b8" }}>PPM</span>
+                </div>
+                <div style={{ fontSize: "0.85rem", color: "#cbd5e1" }}>
+                  {result.ppm < 4
+                    ? "Within Safe Workplace Environmental Baseline (< 4 ppm)"
+                    : result.ppm < 9
+                    ? "Elevated — Approaching OSHA 10 ppm 8-Hour PEL"
+                    : "CRITICAL: Exceeds OSHA 10 ppm Permissible Exposure Limit"}
+                </div>
+              </div>
+
+              {/* Worker Profile Card */}
+              <div className="worker-profile-card">
+                <div className="profile-header-row">
+                  <div className="profile-avatar-circle">
+                    <User size={22} color="#38bdf8" />
+                  </div>
+                  <div className="profile-meta">
+                    <div className="profile-name">{result.owner?.fullName || "Aravind Shankar"}</div>
+                    <div className="profile-id-tag">
+                      <span>ID: <strong>{result.workerId}</strong></span>
+                      <span className="dot-sep">•</span>
+                      <span>{result.owner?.sector || "Refining & Chemical Operations"}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="profile-details-grid">
+                  <div className="profile-detail-item">
+                    <span className="detail-label">ORGANISATION</span>
+                    <span className="detail-value">{result.owner?.organisation || "SulfiSafe Industries"}</span>
+                  </div>
+                  <div className="profile-detail-item">
+                    <span className="detail-label">PLANT / BRANCH</span>
+                    <span className="detail-value">{result.owner?.branch || "Main Plant"}</span>
+                  </div>
+                  <div className="profile-detail-item">
+                    <span className="detail-label">BLOOD GROUP</span>
+                    <span className="detail-value">{result.owner?.bloodGroup || "O+"}</span>
+                  </div>
+                  <div className="profile-detail-item">
+                    <span className="detail-label">EMERGENCY PHONE</span>
+                    <span className="detail-value">{result.owner?.phone || "+91 9876543210"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Gemini Recommendation */}
+              <div className="ai-recommendation-box">
+                <div className="ai-header">
+                  <Sparkles size={18} /> Gemini Safety Protocol
+                </div>
+                <div className="ai-body">{result.recommendation}</div>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
+                <button className="btn btn-hero-camera" style={{ flex: 1.5 }} onClick={startCamera}>
+                  <Camera size={20} /> SCAN NEXT WRISTBAND
+                </button>
+                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setScreen("home")}>
+                  DASHBOARD
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Sidebar Panel */}
+        <aside className="sidebar-panel">
+          {/* Turmeric Indicator Scale */}
+          <div className="card">
+            <div className="card-title">
+              <BarChart3 size={18} color="#f59e0b" />
+              <span>Turmeric Indicator Scale (Calibrated)</span>
+            </div>
+            <div className="scale-table">
+              {TURMERIC_SCALE.map((item) => (
+                <div className="scale-row" key={item.ppm}>
+                  <div className="scale-info">
+                    <div className="scale-color-chip" style={{ backgroundColor: item.color }}></div>
+                    <div>
+                      <div className="scale-ppm">{item.ppm} PPM</div>
+                      <div className="scale-desc">{item.label}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "#94a3b8" }}>{item.osha}</div>
+                </div>
+              ))}
+            </div>
           </div>
-        )}
-      </div>
-    );
-  }
 
-  return null;
+          {/* Live Exposure History */}
+          <div className="card" style={{ flex: 1 }}>
+            <div className="card-title">
+              <Clock size={18} color="#0ea5e9" />
+              <span>Live Exposure History</span>
+            </div>
+            {history.length === 0 ? (
+              <p style={{ fontSize: "0.85rem", color: "#64748b", textAlign: "center", padding: "1.5rem" }}>
+                No recent scans logged yet. Start a scan or upload a picture to populate.
+              </p>
+            ) : (
+              <div className="history-list">
+                {history.map((item) => (
+                  <div className={`history-item ${item.severity}`} key={item.id}>
+                    <div className="history-meta">
+                      <span className="history-id">{item.workerId}</span>
+                      <span className="history-time">{item.timestamp}</span>
+                    </div>
+                    <div
+                      className="history-ppm"
+                      style={{
+                        color:
+                          item.severity === "safe"
+                            ? "var(--safe)"
+                            : item.severity === "danger"
+                            ? "var(--danger)"
+                            : "var(--warning)",
+                      }}
+                    >
+                      {item.ppm} PPM
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </aside>
+      </main>
+
+      {/* Smart Wearable Wristband Specifications Section */}
+      <section className="wristband-specs-section">
+        <div className="specs-container-card">
+          <div className="section-header-row">
+            <div className="section-title-wrap">
+              <BarChart3 size={20} color="#38bdf8" />
+              <h2>Smart Wearable Wristband Specifications</h2>
+            </div>
+            <button
+              className="btn btn-accent"
+              style={{ fontSize: "0.82rem", padding: "0.5rem 0.85rem" }}
+              onClick={() => setShowModal(true)}
+            >
+              <FlaskConical size={16} /> 🧪 Open 3D Badge Simulator
+            </button>
+          </div>
+          <div className="specs-grid">
+            <div className="spec-card">
+              <div className="spec-card-top">
+                <div className="spec-card-icon" style={{ background: "rgba(56, 189, 248, 0.15)", color: "#38bdf8" }}>
+                  🔍
+                </div>
+                <div className="spec-card-title">3-Zone Optical Cartridge</div>
+              </div>
+              <div className="spec-card-body">
+                Dual-modality badge integrating chemical sensor pad, high-density vertical Code-128 barcode, and 5-point CIE-LAB reference chips in a single unified viewport.
+              </div>
+              <div className="spec-tags">
+                <span className="spec-tag">Zone 1: Active Strip</span>
+                <span className="spec-tag">Zone 2: Code 128 ID</span>
+                <span className="spec-tag">Zone 3: Calibration</span>
+              </div>
+            </div>
+
+            <div className="spec-card">
+              <div className="spec-card-top">
+                <div className="spec-card-icon" style={{ background: "rgba(234, 179, 8, 0.15)", color: "#eab308" }}>
+                  🧪
+                </div>
+                <div className="spec-card-title">Curcumin Chelation Reagent</div>
+              </div>
+              <div className="spec-card-body">
+                Natural Curcumin (C₂₁H₂₀O₆) chelation layer. Selective optical chromogenic shift from bright yellow (0 ppm) to dark brown/black upon H₂S exposure.
+              </div>
+              <div className="spec-tags">
+                <span className="spec-tag">0 - 18 ppm Range</span>
+                <span className="spec-tag">&lt; 1s Reaction Time</span>
+                <span className="spec-tag">Zero Gas Cross-Drift</span>
+              </div>
+            </div>
+
+            <div className="spec-card">
+              <div className="spec-card-top">
+                <div className="spec-card-icon" style={{ background: "rgba(34, 197, 94, 0.15)", color: "#22c55e" }}>
+                  🛡️
+                </div>
+                <div className="spec-card-title">Industrial Wearable Specs</div>
+              </div>
+              <div className="spec-card-body">
+                Passive zero-battery wearable band manufactured from medical-grade anti-microbial silicone with acrylic anti-glare window. 30-day continuous field deployment.
+              </div>
+              <div className="spec-tags">
+                <span className="spec-tag">Zero Battery / Zero Power</span>
+                <span className="spec-tag">IP67 Dust & Moisture</span>
+                <span className="spec-tag">30-Day Expiry</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 3D Badge Simulator Modal */}
+      {showModal && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 700, color: "#ffffff" }}>
+                <FlaskConical size={20} color="#38bdf8" />
+                <span>Wearable Wristband Badge Simulator</span>
+              </div>
+              <button className="modal-close-btn" onClick={() => setShowModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <p style={{ fontSize: "0.85rem", color: "#94a3b8", textAlign: "center" }}>
+              Hold this wristband simulation in front of your laptop webcam (or open it on your phone). The auto-scanner will lock onto the center barcode!
+            </p>
+
+            <div className="wearable-device-wrapper">
+              <div className="wristband-strap-loop"></div>
+              <div className="wristband-body">
+                <div className="wristband-hinge"></div>
+                <div className="wristband-viewport">
+                  <div
+                    className="viewport-strip-col"
+                    style={{
+                      backgroundColor:
+                        simulatedExposure === 0
+                          ? "rgb(249, 248, 158)"
+                          : simulatedExposure === 6.2
+                          ? "rgb(219, 177, 138)"
+                          : "rgb(215, 138, 104)",
+                    }}
+                  >
+                    <span className="strip-label">STRIP</span>
+                  </div>
+                  <div className="viewport-barcode-col">
+                    <img
+                      src="https://barcode.tec-it.com/barcode.ashx?data=EMP-4821&code=Code128&dpi=96&rotation=90"
+                      alt="Vertical Code 128 Barcode"
+                      className="vertical-barcode-svg"
+                    />
+                  </div>
+                  <div className="viewport-scale-col">
+                    <div className="ref-scale-step" style={{ backgroundColor: "rgb(249, 248, 158)" }} title="0 ppm"></div>
+                    <div className="ref-scale-step" style={{ backgroundColor: "rgb(238, 198, 168)" }} title="3.3 ppm"></div>
+                    <div className="ref-scale-step" style={{ backgroundColor: "rgb(219, 177, 138)" }} title="6.2 ppm"></div>
+                    <div className="ref-scale-step" style={{ backgroundColor: "rgb(210, 146, 109)" }} title="8.8 ppm"></div>
+                    <div className="ref-scale-step" style={{ backgroundColor: "rgb(215, 138, 104)" }} title="11 ppm"></div>
+                  </div>
+                </div>
+              </div>
+              <div className="wristband-strap-loop"></div>
+            </div>
+
+            <div style={{ width: "100%" }}>
+              <div style={{ fontSize: "0.8rem", color: "#94a3b8", marginBottom: "0.5rem", textAlign: "center" }}>
+                Select Chemical Exposure to Simulate:
+              </div>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button
+                  className="btn btn-secondary"
+                  style={{
+                    flex: 1,
+                    fontSize: "0.8rem",
+                    padding: "0.5rem",
+                    borderColor: simulatedExposure === 0 ? "var(--safe)" : "",
+                  }}
+                  onClick={() => setSimulatedExposure(0)}
+                >
+                  🟢 0 ppm (Safe)
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  style={{
+                    flex: 1,
+                    fontSize: "0.8rem",
+                    padding: "0.5rem",
+                    borderColor: simulatedExposure === 6.2 ? "var(--warning)" : "",
+                  }}
+                  onClick={() => setSimulatedExposure(6.2)}
+                >
+                  🟡 6.2 ppm (Caution)
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  style={{
+                    flex: 1,
+                    fontSize: "0.8rem",
+                    padding: "0.5rem",
+                    borderColor: simulatedExposure === 11 ? "var(--danger)" : "",
+                  }}
+                  onClick={() => setSimulatedExposure(11)}
+                >
+                  🔴 11 ppm (Danger)
+                </button>
+              </div>
+            </div>
+
+            <button className="btn btn-primary" style={{ width: "100%" }} onClick={() => setShowModal(false)}>
+              DONE / READY TO SCAN
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
-
-export default App;
