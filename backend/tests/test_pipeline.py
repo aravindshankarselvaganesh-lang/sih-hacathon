@@ -64,13 +64,13 @@ def test_ai_calibration_exposure():
 
     # Test dangerous exposure (> 10 ppm)
     danger_eval = calibration_ai.calculate_exposure(
-        extracted_L=40.0,
-        extracted_a=8.0,
-        extracted_b=15.0,
-        delta_E=52.0,
-        ambient_temp_c=35.0,
-        relative_humidity=75.0,
-        exposure_hours=8.0
+        extracted_L=25.0,
+        extracted_a=12.0,
+        extracted_b=20.0,
+        delta_E=95.0,
+        ambient_temp_c=30.0,
+        relative_humidity=60.0,
+        exposure_hours=4.0
     )
     assert danger_eval["compliance_status"] == "DANGER_EXCEEDED"
     assert danger_eval["dgms_compliant"] is False
