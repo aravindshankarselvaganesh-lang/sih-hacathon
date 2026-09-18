@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SULFSCAN & SulfiSafe - 30 Worker Barcode / QR ID Badges</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0b0f19;
+            color: #f8fafc;
+            padding: 2rem;
+            margin: 0;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+        h1 {
+            color: #38bdf8;
+            margin-bottom: 0.5rem;
+            font-size: 2rem;
+        }
+        p.sub {
+            color: #94a3b8;
+            font-size: 1.05rem;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+            gap: 1.5rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .badge-card {
+            background: #111827;
+            border: 1px solid #334155;
+            border-radius: 1rem;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        .badge-card:hover {
+            transform: translateY(-4px);
+            border-color: #38bdf8;
+        }
+        .badge-header {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 0.75rem;
+        }
+        .badge-id {
+            color: #38bdf8;
+            font-weight: 700;
+            font-size: 0.95rem;
+            letter-spacing: 0.5px;
+        }
+        .badge-blood {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+        .qr-img {
+            width: 140px;
+            height: 140px;
+            background: #ffffff;
+            padding: 8px;
+            border-radius: 0.75rem;
+            margin-bottom: 0.85rem;
+            border: 1px solid #475569;
+        }
+        .badge-name {
+            font-weight: 600;
+            color: #ffffff;
+            font-size: 1.05rem;
+            margin-bottom: 0.25rem;
+        }
+        .badge-sector {
+            font-size: 0.78rem;
+            color: #94a3b8;
+            margin-bottom: 0.6rem;
+            min-height: 2.2em;
+        }
+        .barcode-val {
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+        .barcode-val code {
+            color: #10b981;
+            font-weight: bold;
+            font-size: 0.85rem;
+            background: rgba(16, 185, 129, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        @media print {
+            body { background: #fff; color: #000; padding: 0; }
+            .badge-card {
+                border: 1px solid #ccc;
+                box-shadow: none;
+                page-break-inside: avoid;
+                break-inside: avoid;
+                margin-bottom: 1rem;
+            }
+            .badge-name { color: #000; }
+            .badge-sector { color: #444; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>SULFSAFE & SULFSCAN - Worker Badges & Barcodes</h1>
+        <p class="sub">30 Newly Registered Refinery Operators (EMP-014 to EMP-043). Point your phone camera or app scanner directly at any QR code below to scan.</p>
+    </div>
+    <div class="grid">
+        
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-014</span>
+            <span class="badge-blood">O+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-014" alt="QR EMP-014" loading="lazy" />
+        <div class="badge-name">Karthik Raja</div>
+        <div class="badge-sector">Sulfur Recovery Unit</div>
+        <div class="barcode-val">Barcode: <code>EMP-014</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-015</span>
+            <span class="badge-blood">B+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-015" alt="QR EMP-015" loading="lazy" />
+        <div class="badge-name">Ananya Iyer</div>
+        <div class="badge-sector">Hydrocracker Unit</div>
+        <div class="barcode-val">Barcode: <code>EMP-015</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-016</span>
+            <span class="badge-blood">A+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-016" alt="QR EMP-016" loading="lazy" />
+        <div class="badge-name">Vikram Malhotra</div>
+        <div class="badge-sector">Crude Distillation Unit</div>
+        <div class="barcode-val">Barcode: <code>EMP-016</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-017</span>
+            <span class="badge-blood">AB+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-017" alt="QR EMP-017" loading="lazy" />
+        <div class="badge-name">Siddharth Rao</div>
+        <div class="badge-sector">Coker & Gas Plant</div>
+        <div class="barcode-val">Barcode: <code>EMP-017</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-018</span>
+            <span class="badge-blood">O-</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-018" alt="QR EMP-018" loading="lazy" />
+        <div class="badge-name">Meera Nair</div>
+        <div class="badge-sector">Desulfurization Unit</div>
+        <div class="barcode-val">Barcode: <code>EMP-018</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-019</span>
+            <span class="badge-blood">B-</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-019" alt="QR EMP-019" loading="lazy" />
+        <div class="badge-name">Rajesh Kulkarni</div>
+        <div class="badge-sector">Catalytic Reforming</div>
+        <div class="barcode-val">Barcode: <code>EMP-019</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-020</span>
+            <span class="badge-blood">A+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-020" alt="QR EMP-020" loading="lazy" />
+        <div class="badge-name">Deepak Verma</div>
+        <div class="badge-sector">Flare & Offsite Storage</div>
+        <div class="barcode-val">Barcode: <code>EMP-020</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-021</span>
+            <span class="badge-blood">O+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-021" alt="QR EMP-021" loading="lazy" />
+        <div class="badge-name">Suresh Menon</div>
+        <div class="badge-sector">Effluent Treatment Plant</div>
+        <div class="barcode-val">Barcode: <code>EMP-021</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-022</span>
+            <span class="badge-blood">B+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-022" alt="QR EMP-022" loading="lazy" />
+        <div class="badge-name">Pooja Hegde</div>
+        <div class="badge-sector">Alkylation Unit</div>
+        <div class="barcode-val">Barcode: <code>EMP-022</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-023</span>
+            <span class="badge-blood">A-</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-023" alt="QR EMP-023" loading="lazy" />
+        <div class="badge-name">Gautam Singhania</div>
+        <div class="badge-sector">Hydrogen Generation Unit</div>
+        <div class="barcode-val">Barcode: <code>EMP-023</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-024</span>
+            <span class="badge-blood">O+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-024" alt="QR EMP-024" loading="lazy" />
+        <div class="badge-name">Rohan Joshi</div>
+        <div class="badge-sector">Vacuum Distillation Unit</div>
+        <div class="barcode-val">Barcode: <code>EMP-024</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-025</span>
+            <span class="badge-blood">AB-</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-025" alt="QR EMP-025" loading="lazy" />
+        <div class="badge-name">Sneha Patel</div>
+        <div class="badge-sector">Sour Water Stripper</div>
+        <div class="barcode-val">Barcode: <code>EMP-025</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-026</span>
+            <span class="badge-blood">B+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-026" alt="QR EMP-026" loading="lazy" />
+        <div class="badge-name">Arun Balakrishnan</div>
+        <div class="badge-sector">Bitumen Blowing Unit</div>
+        <div class="barcode-val">Barcode: <code>EMP-026</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-027</span>
+            <span class="badge-blood">A+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-027" alt="QR EMP-027" loading="lazy" />
+        <div class="badge-name">Harish Nambiar</div>
+        <div class="badge-sector">Amine Treating Unit</div>
+        <div class="barcode-val">Barcode: <code>EMP-027</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-028</span>
+            <span class="badge-blood">O+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-028" alt="QR EMP-028" loading="lazy" />
+        <div class="badge-name">Divya Sundaram</div>
+        <div class="badge-sector">LPG Recovery Section</div>
+        <div class="barcode-val">Barcode: <code>EMP-028</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-029</span>
+            <span class="badge-blood">B+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-029" alt="QR EMP-029" loading="lazy" />
+        <div class="badge-name">Manoj Tiwari</div>
+        <div class="badge-sector">Sulfur Pelletizing Plant</div>
+        <div class="barcode-val">Barcode: <code>EMP-029</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-030</span>
+            <span class="badge-blood">A+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-030" alt="QR EMP-030" loading="lazy" />
+        <div class="badge-name">Naveen Kumar</div>
+        <div class="badge-sector">Petrochemical FCC Unit</div>
+        <div class="barcode-val">Barcode: <code>EMP-030</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-031</span>
+            <span class="badge-blood">AB+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-031" alt="QR EMP-031" loading="lazy" />
+        <div class="badge-name">Ashwin Raman</div>
+        <div class="badge-sector">Naphtha Hydrotreater</div>
+        <div class="barcode-val">Barcode: <code>EMP-031</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-032</span>
+            <span class="badge-blood">O+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-032" alt="QR EMP-032" loading="lazy" />
+        <div class="badge-name">Swati Deshmukh</div>
+        <div class="badge-sector">Tank Farm & Marine Terminal</div>
+        <div class="barcode-val">Barcode: <code>EMP-032</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-033</span>
+            <span class="badge-blood">B+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-033" alt="QR EMP-033" loading="lazy" />
+        <div class="badge-name">Ganesh Pillai</div>
+        <div class="badge-sector">Cooling Tower Operations</div>
+        <div class="barcode-val">Barcode: <code>EMP-033</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-034</span>
+            <span class="badge-blood">A+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-034" alt="QR EMP-034" loading="lazy" />
+        <div class="badge-name">Kavita Reddy</div>
+        <div class="badge-sector">Pipeline Metering Station</div>
+        <div class="barcode-val">Barcode: <code>EMP-034</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-035</span>
+            <span class="badge-blood">O-</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-035" alt="QR EMP-035" loading="lazy" />
+        <div class="badge-name">Alok Saxena</div>
+        <div class="badge-sector">Thermal Cracker Unit</div>
+        <div class="barcode-val">Barcode: <code>EMP-035</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-036</span>
+            <span class="badge-blood">B-</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-036" alt="QR EMP-036" loading="lazy" />
+        <div class="badge-name">Manish Pandey</div>
+        <div class="badge-sector">Visbreaker Unit</div>
+        <div class="barcode-val">Barcode: <code>EMP-036</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-037</span>
+            <span class="badge-blood">A+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-037" alt="QR EMP-037" loading="lazy" />
+        <div class="badge-name">Ramesh Chander</div>
+        <div class="badge-sector">Instrument Air & Utilities</div>
+        <div class="barcode-val">Barcode: <code>EMP-037</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-038</span>
+            <span class="badge-blood">O+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-038" alt="QR EMP-038" loading="lazy" />
+        <div class="badge-name">Pradeep Yadav</div>
+        <div class="badge-sector">Laboratory Analysis Section</div>
+        <div class="barcode-val">Barcode: <code>EMP-038</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-039</span>
+            <span class="badge-blood">B+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-039" alt="QR EMP-039" loading="lazy" />
+        <div class="badge-name">Shreya Sen</div>
+        <div class="badge-sector">Hazardous Waste Management</div>
+        <div class="barcode-val">Barcode: <code>EMP-039</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-040</span>
+            <span class="badge-blood">AB+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-040" alt="QR EMP-040" loading="lazy" />
+        <div class="badge-name">Vinay Bhat</div>
+        <div class="badge-sector">Safety & Fire Services</div>
+        <div class="barcode-val">Barcode: <code>EMP-040</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-041</span>
+            <span class="badge-blood">A+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-041" alt="QR EMP-041" loading="lazy" />
+        <div class="badge-name">Kishore Goud</div>
+        <div class="badge-sector">Power & Steam Generation</div>
+        <div class="barcode-val">Barcode: <code>EMP-041</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-042</span>
+            <span class="badge-blood">O+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-042" alt="QR EMP-042" loading="lazy" />
+        <div class="badge-name">Sandhya Murthy</div>
+        <div class="badge-sector">Tail Gas Treating Unit</div>
+        <div class="barcode-val">Barcode: <code>EMP-042</code></div>
+    </div>
+    
+    <div class="badge-card">
+        <div class="badge-header">
+            <span class="badge-id">EMP-043</span>
+            <span class="badge-blood">B+</span>
+        </div>
+        <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=EMP-043" alt="QR EMP-043" loading="lazy" />
+        <div class="badge-name">Amitabh Sen</div>
+        <div class="badge-sector">Inspection & Corrosion Cell</div>
+        <div class="barcode-val">Barcode: <code>EMP-043</code></div>
+    </div>
+    
+    </div>
+</body>
+</html>
