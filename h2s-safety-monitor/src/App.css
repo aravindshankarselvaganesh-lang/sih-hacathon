@@ -132,7 +132,7 @@ body {
   padding: 1.5rem;
   display: grid;
 }
-@media (width>=992px) {
+@media (min-width: 992px) {
   .dashboard-container {
     grid-template-columns: 1.2fr 0.8fr;
   }
@@ -345,7 +345,7 @@ body {
   position: relative;
   overflow: hidden;
 }
-@media (width>=768px) {
+@media (min-width: 768px) {
   .camera-container {
     aspect-ratio: 16/9;
   }
@@ -836,7 +836,7 @@ body {
   gap: 1.25rem;
   display: grid;
 }
-@media (width>=768px) {
+@media (min-width: 768px) {
   .specs-grid {
     grid-template-columns: repeat(3, 1fr);
   }
@@ -969,4 +969,142 @@ body {
   color: #e2e8f0;
   font-size: 0.82rem;
   font-weight: 600;
+}
+
+/* ==========================================================================
+   Mobile (Phone) and Tablet / Laptop Responsive Optimizations
+   ========================================================================== */
+
+/* Universal touch optimization */
+button, .btn, .btn-hero-camera, a {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Tablets and Laptops (Landscape / Larger screens >= 992px) */
+@media screen and (min-width: 992px) {
+  .dashboard-container {
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 1.75rem;
+    padding: 2rem;
+    max-width: 1360px;
+    margin: 0 auto;
+  }
+  .stage-panel, .sidebar-panel {
+    min-height: calc(100vh - 120px);
+  }
+  .camera-container {
+    aspect-ratio: 16/9;
+    min-height: 440px;
+  }
+}
+
+/* Mobile Devices (Phones <= 768px) */
+@media screen and (max-width: 768px) {
+  .dashboard-container {
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem;
+    gap: 1rem;
+    width: 100%;
+  }
+  .stage-panel {
+    padding: 1rem;
+    border-radius: 0.85rem;
+  }
+  .sidebar-panel {
+    padding: 0;
+    gap: 1rem;
+  }
+  .app-header {
+    padding: 0.75rem 1rem;
+  }
+  .brand-title {
+    font-size: 1.1rem;
+  }
+  .brand-sub {
+    font-size: 0.65rem;
+  }
+  .status-pill {
+    padding: 0.25rem 0.55rem;
+    font-size: 0.7rem;
+  }
+  .status-pill span:last-child {
+    display: none;
+  }
+  .status-pill:after {
+    content: "Live";
+  }
+  .welcome-hero {
+    padding: 1.5rem 0.5rem;
+  }
+  .hero-title {
+    font-size: 1.45rem;
+  }
+  .hero-desc {
+    font-size: 0.85rem;
+    margin-bottom: 1.25rem;
+    line-height: 1.5;
+  }
+  .workflow-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .workflow-step {
+    padding: 0.55rem 0.4rem;
+  }
+  .step-num {
+    font-size: 0.6rem;
+  }
+  .step-text {
+    font-size: 0.72rem;
+  }
+  .action-buttons-group {
+    max-width: 100%;
+  }
+  .btn-hero-camera {
+    padding: 1rem 1.25rem;
+    font-size: 1rem;
+    min-height: 52px;
+  }
+  .camera-container {
+    aspect-ratio: 3/4;
+    max-height: 65vh;
+    border-radius: 0.85rem;
+  }
+  .wristband-target-frame {
+    width: 82%;
+    height: 55%;
+  }
+  .profile-details-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+}
+
+/* Small Phones (<= 420px) */
+@media screen and (max-width: 420px) {
+  .dashboard-container {
+    padding: 0.5rem;
+  }
+  .hero-title {
+    font-size: 1.25rem;
+  }
+  .workflow-grid {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+  .workflow-step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+  }
+  .step-num {
+    margin-bottom: 0;
+  }
+  .profile-details-grid {
+    grid-template-columns: 1fr;
+  }
 }

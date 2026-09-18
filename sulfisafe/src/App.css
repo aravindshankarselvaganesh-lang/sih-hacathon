@@ -30,7 +30,7 @@
     --lightningcss-dark: initial;
   }
 }
-@media (width<=1024px) {
+@media (max-width: 1024px) {
   :root {
     font-size: 16px;
   }
@@ -76,7 +76,7 @@ h1 {
   margin: 32px 0;
   font-size: 56px;
 }
-@media (width<=1024px) {
+@media (max-width: 1024px) {
   h1 {
     margin: 20px 0;
     font-size: 36px;
@@ -88,7 +88,7 @@ h2 {
   font-size: 24px;
   line-height: 118%;
 }
-@media (width<=1024px) {
+@media (max-width: 1024px) {
   h2 {
     font-size: 20px;
   }
@@ -2194,7 +2194,7 @@ button:active {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--primary);
 }
-@media (width<=1100px) {
+@media (max-width: 1100px) {
   .metrics-grid,
   .admin-stat-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -2207,7 +2207,7 @@ button:active {
     grid-template-columns: repeat(2, 1fr);
   }
 }
-@media (width<=700px) {
+@media (max-width: 700px) {
   .language-page,
   .auth-page {
     padding: 18px;
@@ -2353,7 +2353,7 @@ button:active {
     grid-template-columns: repeat(3, 1fr);
   }
 }
-@media (width<=420px) {
+@media (max-width: 420px) {
   .header-actions {
     gap: 7px;
   }
@@ -2426,7 +2426,7 @@ iframe {
   max-width: 100%;
   height: auto;
 }
-@media (width<=480px) {
+@media (max-width: 480px) {
   .dashboard-grid,
   .admin-grid,
   .nav-buttons,
@@ -2451,4 +2451,117 @@ iframe {
 }
 .profile-update-card h1 {
   color: #0f172a !important;
+}
+
+/* ==========================================================================
+   Mobile (Phone) and Tablet / Laptop Responsive Enhancements for SulfiSafe
+   ========================================================================== */
+
+/* Touch accessibility */
+button, input, select, textarea, a {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Tablets and Laptops (>= 992px) */
+@media screen and (min-width: 992px) {
+  .main-content {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 2rem !important;
+  }
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 1.5rem !important;
+  }
+  .metrics-row {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 1rem !important;
+  }
+  .admin-table-container {
+    overflow-x: visible !important;
+  }
+}
+
+/* Mobile Phones (<= 768px) */
+@media screen and (max-width: 768px) {
+  .app-header {
+    padding: 0.75rem 1rem !important;
+  }
+  .brand-logo-text h1 {
+    font-size: 1.25rem !important;
+  }
+  .main-content {
+    padding: 1rem 0.75rem !important;
+  }
+  .language-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.75rem !important;
+  }
+  .role-cards-container {
+    flex-direction: column !important;
+    gap: 1rem !important;
+  }
+  .role-card {
+    width: 100% !important;
+    padding: 1.25rem !important;
+  }
+  .dashboard-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1rem !important;
+  }
+  .metric-card {
+    padding: 1rem !important;
+  }
+  .metrics-row {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.75rem !important;
+  }
+  .nav-buttons {
+    display: flex !important;
+    overflow-x: auto !important;
+    padding-bottom: 0.5rem !important;
+    -webkit-overflow-scrolling: touch;
+    gap: 0.5rem !important;
+  }
+  .nav-buttons button {
+    white-space: nowrap !important;
+    padding: 0.65rem 1rem !important;
+    font-size: 0.85rem !important;
+    flex-shrink: 0 !important;
+  }
+  .admin-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1rem !important;
+  }
+  .admin-table-container {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 0.75rem;
+  }
+  table {
+    min-width: 600px !important;
+  }
+  .modal-content, .card {
+    width: 100% !important;
+    max-width: 95vw !important;
+    margin: 0 auto;
+  }
+}
+
+/* Small Phones (<= 420px) */
+@media screen and (max-width: 420px) {
+  .language-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .metrics-row {
+    grid-template-columns: 1fr !important;
+  }
+  .auth-card, .language-card {
+    padding: 1.25rem 1rem !important;
+  }
 }
