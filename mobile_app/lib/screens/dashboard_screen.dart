@@ -29,24 +29,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadStats() async {
-    final stats = await OfflineDatabase.instance.getExposureStats();
-    setState(() {
-      _stats = stats;
-    });
+    try {
+      final stats = await OfflineDatabase.instance.getExposureStats();
+      if (!mounted) return;
+      setState(() {
+        _stats = stats;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load stats: $e')),
+      );
+    }
   }
 
   Future<void> _triggerSync() async {
+    if (!mounted) return;
     setState(() => _isSyncing = true);
-    final result = await SyncService().syncPendingRecords();
-    setState(() => _isSyncing = false);
+    try {
+      final result = await SyncService().syncPendingRecords();
+      if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(result['message'] as String),
-        backgroundColor: (result['success'] as bool) ? Colors.green.shade700 : Colors.orange.shade800,
-      ),
-    );
-    _loadStats();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] as String),
+          backgroundColor: (result['success'] as bool) ? Colors.green.shade700 : Colors.orange.shade800,
+        ),
+      );
+      await _loadStats();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sync failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
   }
 
   @override

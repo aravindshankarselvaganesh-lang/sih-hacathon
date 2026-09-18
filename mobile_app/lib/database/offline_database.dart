@@ -20,8 +20,9 @@ class OfflineDatabase {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
   }
 
@@ -53,6 +54,18 @@ class OfflineDatabase {
         is_synced INTEGER NOT NULL DEFAULT 0
       )
     ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_scans_synced_at ON scans(is_synced, scanned_at)',
+    );
+  }
+
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    // v1 -> v2: add covering index for pending-sync queries.
+    if (oldVersion < 2) {
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_scans_synced_at ON scans(is_synced, scanned_at)',
+      );
+    }
   }
 
   Future<int> insertScan(ScanRecord record) async {
@@ -60,7 +73,7 @@ class OfflineDatabase {
     return await db.insert(
       'scans',
       record.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      conflictAlgorithm: ConflictAlgorithm.abort,
     );
   }
 
@@ -75,14 +88,29 @@ class OfflineDatabase {
     return result.map((map) => ScanRecord.fromMap(map)).toList();
   }
 
+  /// Lightweight helper for badges / sync scheduling without loading rows.
+  Future<int> getPendingCount() async {
+    final db = await instance.database;
+    return Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM scans WHERE is_synced = 0'),
+        ) ??
+        0;
+  }
+
   Future<void> markAsSynced(List<String> clientUuids) async {
     if (clientUuids.isEmpty) return;
     final db = await instance.database;
-    final placeholders = List.filled(clientUuids.length, '?').join(',');
-    await db.rawUpdate(
-      'UPDATE scans SET is_synced = 1 WHERE client_uuid IN ($placeholders)',
-      clientUuids,
-    );
+    await db.transaction((txn) async {
+      for (var i = 0; i < clientUuids.length; i += 500) {
+        final end = (i + 500 < clientUuids.length) ? i + 500 : clientUuids.length;
+        final chunk = clientUuids.sublist(i, end);
+        final placeholders = List.filled(chunk.length, '?').join(',');
+        await txn.rawUpdate(
+          'UPDATE scans SET is_synced = 1 WHERE client_uuid IN ($placeholders)',
+          chunk,
+        );
+      }
+    });
   }
 
   Future<List<ScanRecord>> getAllScans() async {

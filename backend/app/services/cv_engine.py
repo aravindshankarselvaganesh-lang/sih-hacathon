@@ -15,8 +15,17 @@ Functions:
 """
 
 import cv2
+import logging
 import numpy as np
 from typing import Tuple, Dict, Any, Optional
+
+
+logger = logging.getLogger(__name__)
+
+
+class LowConfidence(Exception):
+    """Raised when ROI is too small / unreliable for colorimetry."""
+    pass
 
 
 class DosimeterCVEngine:
@@ -36,10 +45,13 @@ class DosimeterCVEngine:
         rect[3] = pts[np.argmax(diff)]
         return rect
 
-    def perspective_warp_badge(self, image: np.ndarray, target_size: int = 500) -> np.ndarray:
+    def perspective_warp_badge(self, image: np.ndarray, target_size: int = 500) -> Tuple[np.ndarray, Dict[str, Any]]:
         """
         Detects badge quadrilateral and warps perspective to canonical 500x500 image.
-        If no distinct quadrilateral is found, crops center square smoothly.
+        Fail-closed: if no distinct quadrilateral is found, falls back to a center
+        crop BUT flags it via warp_method/confidence so callers never mistake it
+        for a high-confidence quad warp.
+        Returns (warped_image, {"warp_method": str, "confidence": float}).
         """
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -67,19 +79,43 @@ class DosimeterCVEngine:
 
             M = cv2.getPerspectiveTransform(rect, dst)
             warped = cv2.warpPerspective(image, M, (target_size, target_size))
-            return warped
+            return warped, {"warp_method": "quad_warp", "confidence": 0.95}
         else:
-            # Center crop fallback
+            # Center crop fallback (fail-closed: flagged low confidence)
             h, w = image.shape[:2]
             min_dim = min(h, w)
             sy = (h - min_dim) // 2
             sx = (w - min_dim) // 2
             cropped = image[sy:sy + min_dim, sx:sx + min_dim]
-            return cv2.resize(cropped, (target_size, target_size))
+            resized = cv2.resize(cropped, (target_size, target_size))
+            return resized, {"warp_method": "center_crop_fallback", "confidence": 0.35}
+
+    def assess_blur_glare(self, image: np.ndarray) -> Dict[str, Any]:
+        """
+        Image-quality stub (fail-closed signal, not a silent pass).
+        - Blur: variance of Laplacian (low var ~= blurry/out-of-focus).
+          Threshold here is a heuristic stub; calibrate on real badge photos.
+        - Glare/flat-field: basic std + saturation check (washed-out highlights
+          or near-uniform frame suggest glare or lens occlusion).
+        """
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+        lap_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        std = float(np.std(gray.astype(np.float32)))
+        mean = float(np.mean(gray.astype(np.float32)))
+        is_blurry = bool(lap_var < 100.0)
+        is_glare = bool(mean > 235.0 or std < 8.0)
+        return {
+            "laplacian_var": round(lap_var, 2),
+            "mean": round(mean, 2),
+            "std": round(std, 2),
+            "is_blurry": is_blurry,
+            "is_glare": is_glare,
+        }
 
     def normalize_illumination(self, badge_img: np.ndarray) -> np.ndarray:
         """
         White balance normalization using the top-left white reference patch (5% to 15% ROI).
+        Gain clamped to 0.5..4.0.
         """
         h, w = badge_img.shape[:2]
         # White reference patch located at top-left border
@@ -89,7 +125,13 @@ class DosimeterCVEngine:
         # Avoid zero division
         mean_bgr = np.maximum(mean_bgr, 1.0)
         target_white = np.array([245.0, 245.0, 245.0])
-        gain = target_white / mean_bgr
+        raw_gain = target_white / mean_bgr
+
+        # Safety clamp: gains outside 0.5..4.0 imply extreme/failed lighting.
+        # Fail closed (raise) rather than silently white-balancing garbage.
+        if bool(np.any(raw_gain < 0.5) or np.any(raw_gain > 4.0)):
+            raise ValueError(f"Illumination gain out of safe range 0.5..4.0: {raw_gain.tolist()}")
+        gain = np.clip(raw_gain, 0.5, 4.0)
 
         # Apply channel gains and clip
         normalized = np.zeros_like(badge_img, dtype=np.float32)
@@ -103,12 +145,30 @@ class DosimeterCVEngine:
         Extracts the center reactive chemical strip, converts to CIE LAB,
         and computes delta_E from baseline virgin unexposed strip.
         Returns: (L*, a*, b*, delta_E)
+
+        NOTE (sRGB linearization): OpenCV's COLOR_BGR2LAB assumes gamma-
+        corrected sRGB input and handles the non-linear transfer internally
+        for uint8 images. If a linear-RGB pipeline is introduced later
+        (e.g. raw sensor values), explicitly linearize sRGB
+        (c_lin = (c/255 <= 0.04045) ? c/255/12.92 : ((c/255+0.055)/1.055)^2.4)
+        before XYZ->LAB conversion, otherwise delta_E will be biased.
+        TODO: replace default_virgin_lab + fixed k with a fitted per-LOT
+        model loaded from CALIBRATION_REGISTRY (see
+        ml_calibration/badge_color_chart.py::get_calibration_for_lot).
         """
+        assert badge_img.dtype == np.uint8, f"badge image must be uint8 before LAB conversion, got {badge_img.dtype}"
+        if badge_img.dtype != np.uint8:
+            raise ValueError(f"badge image must be uint8 before LAB conversion, got {badge_img.dtype}")
         h, w = badge_img.shape[:2]
         # Chemical sensing strip is centered in the badge
         sy, ey = int(h * 0.35), int(h * 0.65)
         sx, ex = int(w * 0.35), int(w * 0.65)
         strip_roi = badge_img[sy:ey, sx:ex]
+        rh, rw = strip_roi.shape[:2]
+        if rh < 20 or rw < 20:
+            raise LowConfidence(f"Chemical strip ROI too small ({rw}x{rh}px); minimum 20x20 required.")
+        if strip_roi.dtype != np.uint8:
+            raise ValueError(f"strip ROI must be uint8 before LAB conversion, got {strip_roi.dtype}")
 
         # Convert BGR -> CIE LAB (OpenCV scales L to 0..255, a,b to 0..255)
         lab_roi = cv2.cvtColor(strip_roi, cv2.COLOR_BGR2LAB)
@@ -132,16 +192,49 @@ class DosimeterCVEngine:
         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         if img is None:
             raise ValueError("Invalid image buffer: could not decode image.")
+        h0, w0 = img.shape[:2]
+        if h0 < 100 or w0 < 100:
+            raise ValueError(f"Image too small ({w0}x{h0}px); minimum 100x100 required.")
 
-        warped = self.perspective_warp_badge(img)
+        warp_out = self.perspective_warp_badge(img)
+        # Back-compat: accept (image, info) tuple or legacy bare ndarray.
+        if isinstance(warp_out, tuple):
+            warped, warp_info = warp_out
+        elif isinstance(warp_out, dict):
+            warped, warp_info = warp_out["image"], warp_out
+        else:
+            warped, warp_info = warp_out, {"warp_method": "unknown", "confidence": 0.0}
+        quality = self.assess_blur_glare(warped)
         normalized = self.normalize_illumination(warped)
         L, a, b, delta_E = self.extract_chemical_strip_lab(normalized)
+
+        warp_confidence = float(warp_info.get("confidence", 0.0))
+        # Reject rule (fail-closed): low warp confidence OR blur/glare must
+        # surface needs_retake=true so callers never silently treat a bad
+        # capture as NORMAL. Threshold 0.6 separates quad_warp (0.95) from
+        # center_crop_fallback (0.35).
+        needs_retake = bool(
+            warp_confidence < 0.6
+            or quality.get("is_blurry", False)
+            or quality.get("is_glare", False)
+        )
+        if needs_retake:
+            logger.warning(
+                "Image quality reject: warp_confidence=%.2f blur=%s glare=%s -> needs_retake=true",
+                warp_confidence, quality.get("is_blurry"), quality.get("is_glare"),
+            )
 
         return {
             "extracted_L": round(L, 2),
             "extracted_a": round(a, 2),
             "extracted_b": round(b, 2),
             "delta_E": round(delta_E, 2),
+            "warp_method": warp_info.get("warp_method", "unknown"),
+            "warp_confidence": warp_info.get("confidence", 0.0),
+            "laplacian_var": quality["laplacian_var"],
+            "is_blurry": quality["is_blurry"],
+            "is_glare": quality["is_glare"],
+            "needs_retake": needs_retake,
         }
 
 

@@ -18,7 +18,9 @@ import {
   X,
 } from "lucide-react";
 
-const geminiClient = new GoogleGenerativeAI("AQ.Ab8RN6I5JVDk6zB5w-hnEuV88pYURL-mIfPOEEExiFrtYn62yw");
+// SECURITY: Gemini key comes from env only. If missing, AI feature is disabled (see processDiagnostic guard).
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_KEY || "";
+const geminiClient = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
 
 const TURMERIC_SCALE = [
   { ppm: "0.8", color: "#f8ff6a", rgb: [248, 255, 106], label: "Safe Baseline", osha: "0.5 - 1.0 ppm" },
@@ -182,7 +184,8 @@ const saveExposureLog = async (badgeId, ppmValue, severity, recommendation) => {
             sector: "Industrial Operations",
             bloodGroup: "O+",
             phone: "9876543210",
-            password: "Employee@123",
+            // SECURITY: never store plaintext fallback passwords here. Use Supabase Auth instead.
+            password: null,
             riskStatus,
             cumulativeDose: `${(ppm * 8).toFixed(1)} ppm·h`,
             temperature: 29,
@@ -304,6 +307,7 @@ export default function App() {
   const [showModal, setShowModal] = useState(false);
   const [simulatedExposure, setSimulatedExposure] = useState(0);
   const [scanProgress, setScanProgress] = useState(0);
+  const [scanError, setScanError] = useState("");
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -360,6 +364,7 @@ export default function App() {
 
   const startCamera = async () => {
     setScreen("camera");
+    setScanError("");
     isScanningRef.current = true;
     setScanProgress(0);
     lockStreakRef.current = 0;
@@ -381,7 +386,7 @@ export default function App() {
         stream = await navigator.mediaDevices.getUserMedia({ video: true });
       } catch (e) {
         console.error("Camera access error:", e);
-        alert("Camera permission denied. Please allow camera access in your browser settings and refresh.");
+        setScanError("Camera unavailable. Please allow camera access and try again.");
         setScreen("home");
         return;
       }
@@ -465,8 +470,8 @@ export default function App() {
           if (tickCount >= 15 && isScanningRef.current) {
             console.log("3-second hard limit reached. Aborting scan.");
             cleanupCamera();
+            setScanError("Scan timed out. Please align the wristband and try again.");
             setScreen("home");
-            alert("Scan Timeout: Could not confidently lock onto the strip within 3 seconds. Please align the wristband and rescan.");
           }
         }, 200);
       }
@@ -536,22 +541,31 @@ export default function App() {
 
       saveExposureLog(workerId || "EMP001", ppm, severity, fallbackRec);
 
-      geminiClient
-        .getGenerativeModel({ model: "gemini-1.5-flash" })
-        .generateContent(
-          `A chemical refinery worker (Badge: ${workerId}) was exposed to ${ppm} ppm of Hydrogen Sulfide (H2S). The OSHA 8-hour Permissible Exposure Limit (PEL) is 10 ppm. Severity: ${severity}. Provide a concise 2-sentence emergency response protocol for the safety officer.`
-        )
-        .then((res) => {
-          const text = res.response.text();
-          if (text) {
-            setResult((curr) => (curr && curr.id === newScan.id ? { ...curr, recommendation: text } : curr));
-            setHistory((prev) => prev.map((item) => (item.id === newScan.id ? { ...item, recommendation: text } : item)));
-          }
-        })
-        .catch((err) => console.warn("Gemini async notice:", err));
+      // AI enhancement is optional and env-gated. Never call the API without a key.
+      if (!geminiClient) {
+        setResult((curr) =>
+          curr && curr.id === newScan.id
+            ? { ...curr, recommendation: `${fallbackRec} (AI disabled: set VITE_GEMINI_KEY to enable.)` }
+            : curr
+        );
+      } else {
+        geminiClient
+          .getGenerativeModel({ model: "gemini-1.5-flash" })
+          .generateContent(
+            `A chemical refinery worker (Badge: ${workerId}) was exposed to ${ppm} ppm of Hydrogen Sulfide (H2S). The OSHA 8-hour Permissible Exposure Limit (PEL) is 10 ppm. Severity: ${severity}. Provide a concise 2-sentence emergency response protocol for the safety officer.`
+          )
+          .then((res) => {
+            const text = res.response.text();
+            if (text) {
+              setResult((curr) => (curr && curr.id === newScan.id ? { ...curr, recommendation: text } : curr));
+              setHistory((prev) => prev.map((item) => (item.id === newScan.id ? { ...item, recommendation: text } : item)));
+            }
+          })
+          .catch((err) => console.warn("Gemini async notice:", err));
+      }
     } catch (err) {
       console.error("Local analysis error:", err);
-      alert(`Diagnostic Error: ${err.message}`);
+      setScanError("Could not complete the scan. Please try again.");
       setScreen("home");
     }
   };
@@ -587,6 +601,11 @@ export default function App() {
                 <ShieldCheck size={44} />
               </div>
               <h1 className="hero-title">Wearable H₂S Monitor</h1>
+              {scanError && (
+                <div role="alert" style={{ color: "#f87171", marginBottom: "0.75rem" }}>
+                  {scanError}
+                </div>
+              )}
               <p className="hero-desc">
                 High-precision colorimetric scanner for 3D wearable wristbands. Features continuous automatic strip detection, instant edge AI & OSHA safety analytics.
               </p>

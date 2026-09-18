@@ -4,6 +4,8 @@ class EnvironmentalData {
   final String weatherSource;
   final double? latitude;
   final double? longitude;
+  /// True when values came from the live network API, false for cached/SCADA fallback.
+  final bool isLive;
 
   const EnvironmentalData({
     required this.ambientTempC,
@@ -11,15 +13,17 @@ class EnvironmentalData {
     required this.weatherSource,
     this.latitude,
     this.longitude,
+    this.isLive = false,
   });
 
   factory EnvironmentalData.defaultPlantBaseline() {
     return const EnvironmentalData(
       ambientTempC: 31.5,
       relativeHumidity: 63.0,
-      weatherSource: 'SCADA Plant Telemetry Cache',
+      weatherSource: 'scada/baseline-cache',
       latitude: 22.3072,
       longitude: 73.1812,
+      isLive: false,
     );
   }
 

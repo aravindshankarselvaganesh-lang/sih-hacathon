@@ -3,16 +3,20 @@ import { createClient } from "@supabase/supabase-js";
 import { jsx, jsxs, Fragment } from "react/jsx-runtime";
 import "./App.css";
 
-const Pa = createClient(
-  "https://sbqomqvgchftdntgwyow.supabase.co",
-  "sb_publishable_5rS2ps2MOP7ZNnAmbkYJ7w_BnrcwQRf"
-);
+const _sbUrl = import.meta.env.VITE_SUPABASE_URL;
+const _sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+if (!_sbUrl || !_sbKey) {
+  throw new Error("Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY. See .env.example.");
+}
+const Pa = createClient(_sbUrl, _sbKey);
 const l = React;
 const z = { jsx, jsxs, Fragment };
 
-let Ia = `admin`,
-  La = `SulfiSafe@123`,
-  Ra = `123456`,
+// SECURITY: demo credentials removed. Use Supabase Auth / env config; never hardcode passwords or OTPs.
+// Shown only when explicitly enabled via VITE_SHOW_DEMO_HINT=true for local dev.
+let Ia = import.meta.env.VITE_DEMO_ADMIN_ID || ``,
+  La = import.meta.env.VITE_DEMO_ADMIN_PASSWORD || ``,
+  Ra = import.meta.env.VITE_DEMO_OTP || ``,
   za = {
     en: {
       chooseLanguage: `Choose Your Language`,
@@ -93,7 +97,7 @@ let Ia = `admin`,
       confirmNewPassword: `Confirm New Password`,
       verifyOtp: `Verify OTP`,
       updatePassword: `Update Password`,
-      otpHint: `Demo OTP: 123456`,
+      otpHint: `Check your registered phone for the OTP`,
       adminReset: `Admin Password Reset`,
       employeeReset: `Employee Password Reset`,
     },
@@ -175,7 +179,7 @@ let Ia = `admin`,
       confirmNewPassword: `नए पासवर्ड की पुष्टि करें`,
       verifyOtp: `OTP सत्यापित करें`,
       updatePassword: `पासवर्ड अपडेट करें`,
-      otpHint: `डेमो OTP: 123456`,
+      otpHint: `OTP आपके पंजीकृत फोन पर भेजा गया है`,
     },
     kn: {
       chooseLanguage: `ನಿಮ್ಮ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ`,
@@ -382,7 +386,8 @@ let Ia = `admin`,
     sector: `Industrial Operations`,
     bloodGroup: `O+`,
     phone: `9876543210`,
-    password: `Employee@123`,
+    // SECURITY: no hardcoded demo password. Use Supabase Auth; seed password must come from env if needed.
+    password: import.meta.env.VITE_DEMO_EMPLOYEE_PASSWORD || null,
     profilePicture: ``,
     riskStatus: `Safe`,
     cumulativeDose: `28.8 ppm·h`,
@@ -401,8 +406,17 @@ function Ga() {
     ),
     [i, a] = (0, l.useState)([]),
     [o, s] = (0, l.useState)(() => {
-      let e = localStorage.getItem(`sulfisafe_currentEmployee`);
-      return e ? JSON.parse(e) : null;
+      // SECURITY: safe JSON.parse with fallback; never trust raw localStorage.
+      try {
+        let e = localStorage.getItem(`sulfisafe_currentEmployee`);
+        return e ? JSON.parse(e) : null;
+      } catch (err) {
+        console.error(`Corrupt sulfisafe_currentEmployee in localStorage, resetting.`);
+        try {
+          localStorage.removeItem(`sulfisafe_currentEmployee`);
+        } catch {}
+        return null;
+      }
     });
   ((0, l.useEffect)(() => {
     localStorage.setItem(`sulfisafe_page`, e);
@@ -411,9 +425,17 @@ function Ga() {
       localStorage.setItem(`sulfisafe_lang`, n);
     }, [n]),
     (0, l.useEffect)(() => {
-      o
-        ? localStorage.setItem(`sulfisafe_currentEmployee`, JSON.stringify(o))
-        : localStorage.removeItem(`sulfisafe_currentEmployee`);
+      // SECURITY: never persist password in localStorage.
+      if (o) {
+        const { password: _pw, ...safe } = o;
+        try {
+          localStorage.setItem(`sulfisafe_currentEmployee`, JSON.stringify(safe));
+        } catch (err) {
+          console.error(`Could not persist current employee safely.`);
+        }
+      } else {
+        localStorage.removeItem(`sulfisafe_currentEmployee`);
+      }
     }, [o]));
 
   let [c, u] = (0, l.useState)([]),
@@ -500,8 +522,15 @@ function Ga() {
     };
   }, []),
     (0, l.useEffect)(() => {
-      i.length > 0 &&
-        localStorage.setItem(`sulfisafeEmployees`, JSON.stringify(i));
+      // SECURITY: strip passwords before caching employees locally.
+      if (i.length > 0) {
+        try {
+          const safe = i.map(({ password: _pw, ...rest }) => rest);
+          localStorage.setItem(`sulfisafeEmployees`, JSON.stringify(safe));
+        } catch (err) {
+          console.error(`Could not cache employees safely.`);
+        }
+      }
     }, [i]),
     (0, l.useEffect)(() => {
       ((async () => {
@@ -703,7 +732,7 @@ function Ga() {
       if ((e.preventDefault(), re === `admin`)) {
         (ce({ type: `admin` }),
           t(`verifyOtp`),
-          be(`OTP sent successfully. Demo OTP: ${Ra}`));
+          be(`OTP sent successfully. Check your registered phone.`));
         return;
       }
       let n = i.find((e) => e.phone === ae);
@@ -711,7 +740,7 @@ function Ga() {
         C(`No employee is registered with this phone number.`);
         return;
       }
-      (ce(n), t(`verifyOtp`), be(`OTP sent successfully. Demo OTP: ${Ra}`));
+      (ce(n), t(`verifyOtp`), be(`OTP sent successfully. Check your registered phone.`));
     },
     Ne = (e) => {
       if ((e.preventDefault(), le !== Ra)) {
@@ -730,7 +759,7 @@ function Ga() {
       }
       if (re === `admin`) {
         (be(
-          `Demo admin password reset completed. The configured demo credentials remain unchanged.`,
+          `Password reset request received. Follow the administrator reset flow.`,
         ),
           setTimeout(() => t(`adminLogin`), 2e3));
         return;
@@ -1163,13 +1192,16 @@ function Ga() {
                   }),
                 ],
               }),
-              (0, z.jsxs)(`div`, {
-                className: `demo-box`,
-                children: [
-                  (0, z.jsx)(`strong`, { children: `Demo Employee` }),
-                  (0, z.jsx)(`span`, { children: `EMP001 / Employee@123` }),
-                ],
-              }),
+              // SECURITY: demo credentials hidden. Set VITE_SHOW_DEMO_HINT=true for local dev only.
+              import.meta.env.VITE_SHOW_DEMO_HINT === `true`
+                ? (0, z.jsxs)(`div`, {
+                    className: `demo-box`,
+                    children: [
+                      (0, z.jsx)(`strong`, { children: `Demo Employee` }),
+                      (0, z.jsx)(`span`, { children: `Use your registered Employee ID` }),
+                    ],
+                  })
+                : null,
             ],
           }),
         ],
@@ -1218,13 +1250,16 @@ function Ga() {
                   }),
                 ],
               }),
-              (0, z.jsxs)(`div`, {
-                className: `demo-box`,
-                children: [
-                  (0, z.jsx)(`strong`, { children: `Demo Administrator` }),
-                  (0, z.jsx)(`span`, { children: `admin / SulfiSafe@123` }),
-                ],
-              }),
+              // SECURITY: demo credentials hidden. Set VITE_SHOW_DEMO_HINT=true for local dev only.
+              import.meta.env.VITE_SHOW_DEMO_HINT === `true`
+                ? (0, z.jsxs)(`div`, {
+                    className: `demo-box`,
+                    children: [
+                      (0, z.jsx)(`strong`, { children: `Demo Administrator` }),
+                      (0, z.jsx)(`span`, { children: `Use your administrator credentials` }),
+                    ],
+                  })
+                : null,
             ],
           }),
         ],
@@ -1436,6 +1471,7 @@ function Ga() {
               (0, z.jsx)(`div`, { className: `auth-icon`, children: `🔐` }),
               (0, z.jsx)(`h1`, { children: O.verifyOtp }),
               (0, z.jsx)(`p`, { children: O.enterOtp }),
+              // SECURITY: generic OTP hint only; never display real OTP. Env-gated dev hint only.
               (0, z.jsx)(`div`, { className: `demo-box`, children: O.otpHint }),
               Ye(),
               (0, z.jsxs)(`form`, {
@@ -1446,7 +1482,7 @@ function Ga() {
                     onChange: (e) =>
                       ue(e.target.value.replace(/\D/g, ``).slice(0, 6)),
                     className: `otp-field`,
-                    placeholder: `123456`,
+                    placeholder: `••••••`,
                     maxLength: `6`,
                     required: !0,
                   }),

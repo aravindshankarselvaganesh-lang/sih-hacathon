@@ -15,7 +15,8 @@ Includes:
 """
 
 import io
-from datetime import datetime
+import math
+from datetime import datetime, timezone
 from typing import List, Dict, Any
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
@@ -26,7 +27,31 @@ from reportlab.platypus import (
 
 
 class CompliancePDFGenerator:
-    def generate_dgms_oisd_report(self, records: List[Dict[str, Any]], refinery_name: str = "INDIAN PETROLEUM & REFINERY CORPORATION LTD.") -> bytes:
+    @staticmethod
+    def _fmt_or_retest(value: Any, fmt: str) -> str:
+        """Fail-closed formatter: None/missing/NaN never renders as 0.0 (false-safe)."""
+        if value is None:
+            return "N/A RETEST"
+        try:
+            f = float(value)
+        except (TypeError, ValueError):
+            return "N/A RETEST"
+        try:
+            if math.isnan(f) or math.isinf(f):
+                return "N/A RETEST"
+        except Exception:
+            return "N/A RETEST"
+        try:
+            return fmt.format(f)
+        except (TypeError, ValueError):
+            return "N/A RETEST"
+
+    def generate_dgms_oisd_report(
+        self,
+        records: List[Dict[str, Any]],
+        refinery_name: str = "INDIAN PETROLEUM & REFINERY CORPORATION LTD.",
+        empty_notice: bool = False,
+    ) -> bytes:
         """Generates a professional PDF audit document in memory and returns raw bytes."""
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(
@@ -94,7 +119,7 @@ class CompliancePDFGenerator:
         elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#0284c7"), spaceAfter=12))
 
         # 2. Audit Metadata Grid
-        now_str = datetime.utcnow().strftime("%d-%b-%Y %H:%M:%S UTC")
+        now_str = datetime.now(timezone.utc).strftime("%d-%b-%Y %H:%M:%S UTC")
         meta_data = [
             [
                 Paragraph("<b>Audit Date:</b> " + now_str, body_style),
@@ -105,7 +130,7 @@ class CompliancePDFGenerator:
                 Paragraph("<b>Inspection Type:</b> Daily Statutory Shift Clearance", body_style),
             ],
             [
-                Paragraph("<b>Standard Limits:</b> TWA 10.0 ppm | Action 5.0 ppm", body_style),
+                Paragraph("<b>Standard Limits:</b> TWA 10.0 ppm | STEL-15 15.0 ppm | Action 5.0 ppm", body_style),
                 Paragraph("<b>Badge Type:</b> Lead Acetate Colorimetric Strip", body_style),
             ]
         ]
@@ -121,10 +146,11 @@ class CompliancePDFGenerator:
         elements.append(Spacer(1, 14))
 
         # 3. Summary Statistics
+        # Fail-closed: any unknown/missing status counts as danger, never as safe.
         total_workers = len(records)
         safe_count = sum(1 for r in records if r.get("compliance_status") == "NORMAL")
         action_count = sum(1 for r in records if r.get("compliance_status") == "ACTION_REQUIRED")
-        danger_count = sum(1 for r in records if r.get("compliance_status") == "DANGER_EXCEEDED")
+        danger_count = total_workers - safe_count - action_count
 
         elements.append(Paragraph("Shift Exposure Summary", section_heading))
         elements.append(Spacer(1, 4))
@@ -159,27 +185,53 @@ class CompliancePDFGenerator:
         elements.append(Paragraph("Statutory Worker Dosimetry Roster", section_heading))
         elements.append(Spacer(1, 4))
 
+        if empty_notice or len(records) == 0:
+            elements.append(
+                Paragraph(
+                    "No scan records found for the selected period. Empty roster — no exposures to audit.",
+                    body_style,
+                )
+            )
+            elements.append(Spacer(1, 8))
+
         table_header = ["Worker ID", "Name & Unit", "Badge UID", "ΔE", "Temp/RH", "Dosage (ppm·hr)", "TWA (ppm)", "DGMS Status"]
         table_rows = [table_header]
 
         for r in records:
-            status = r.get("compliance_status", "NORMAL")
-            status_color = "#166534" if status == "NORMAL" else ("#854d0e" if status == "ACTION_REQUIRED" else "#991b1b")
+            status = r.get("compliance_status") or "UNKNOWN_RETEST"
+            if status == "NORMAL":
+                status_color = "#166534"
+            elif status == "ACTION_REQUIRED":
+                status_color = "#854d0e"
+            else:
+                # Unknown/missing statuses render as danger (fail-closed).
+                status_color = "#991b1b"
             status_text = f"<font color='{status_color}'><b>{status}</b></font>"
+
+            delta_e = r.get("delta_E")
+            temp_c = r.get("ambient_temp_c")
+            rh = r.get("relative_humidity")
+            dosage = r.get("cumulative_dosage_ppm_hr")
+            twa = r.get("avg_concentration_ppm")
+            temp_rh = (
+                f"{float(temp_c):.0f}°C / {float(rh):.0f}%"
+                if temp_c is not None and rh is not None
+                else "N/A RETEST"
+            )
 
             table_rows.append([
                 r.get("worker_code", "N/A"),
                 f"{r.get('worker_name', 'Worker')}\n({r.get('department', 'Plant')})",
                 r.get("badge_uid", "BDG-00"),
-                f"{r.get('delta_E', 0.0):.1f}",
-                f"{r.get('ambient_temp_c', 30.0):.0f}°C / {r.get('relative_humidity', 60.0):.0f}%",
-                f"{r.get('cumulative_dosage_ppm_hr', 0.0):.2f}",
-                f"{r.get('avg_concentration_ppm', 0.0):.2f}",
+                self._fmt_or_retest(delta_e, "{:.1f}"),
+                temp_rh,
+                self._fmt_or_retest(dosage, "{:.2f}"),
+                self._fmt_or_retest(twa, "{:.2f}"),
                 Paragraph(status_text, body_style)
             ])
 
         # Render Table
-        roster_table = Table(table_rows, colWidths=[55, 110, 65, 35, 75, 75, 55, 70])
+        roster_table = Table(table_rows, colWidths=[55, 110, 65, 35, 75, 75, 55, 70], repeatRows=1)
         roster_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1e293b")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),

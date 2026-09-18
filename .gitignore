@@ -42,6 +42,12 @@ pnpm-debug.log*
 .env.*
 !.env.example
 
+# Test / coverage artifacts
+.pytest_cache/
+.coverage/
+coverage.xml
+htmlcov/
+
 # IDEs & System files
 .vscode/*
 !.vscode/extensions.json
@@ -49,4 +55,10 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
-.vercel
+.vercel/
+**/.vercel/
+
+# Dataset images
+ml_calibration/dataset/images/
+ml_calibration/user_dataset/images/
+*.pdf

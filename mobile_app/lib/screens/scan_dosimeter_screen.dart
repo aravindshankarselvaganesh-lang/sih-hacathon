@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/worker_badge.dart';
@@ -20,6 +21,9 @@ class _ScanDosimeterScreenState extends State<ScanDosimeterScreen> {
   WorkerBadge? _selectedWorker;
   bool _isFlashOn = false;
   bool _isProcessing = false;
+  // Demo/mock colorimetry is debug-only. Defaults to false in release
+  // (kDebugMode == false), so release builds fail closed ("Camera required").
+  bool _mockMode = kDebugMode;
   final List<WorkerBadge> _demoWorkers = BarcodeService.getDemoBadges();
 
   @override
@@ -30,61 +34,99 @@ class _ScanDosimeterScreenState extends State<ScanDosimeterScreen> {
 
   Future<void> _executeOneShotCapture() async {
     if (_selectedWorker == null) return;
+    // Fail-closed: real camera image required unless debug mock mode is on.
+    // TODO: wire CameraService.takeBadgePicture() XFile here and run
+    // OpenCV warp + LAB colorimetry on the captured bytes instead of Random().
+    const bool hasCameraImage = false; // no camera frame plumbed yet
+    if (!hasCameraImage && !(kDebugMode && _mockMode)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Camera required: capture a badge image to analyze.')),
+      );
+      return;
+    }
 
     setState(() => _isProcessing = true);
 
-    // 1. Environmental Telemetry Fusion (Weather API / Plant SCADA)
-    final env = await WeatherService().fetchAmbientConditions();
+    try {
+      // 1. Environmental Telemetry Fusion (Weather API / Plant SCADA)
+      final env = await WeatherService().fetchAmbientConditions();
+      if (!mounted) return;
 
-    // 2. Simulated OpenCV colorimetric extraction (CIE L*a*b* delta from virgin strip)
-    // Random representative exposure for demo simulation:
-    final rand = Random();
-    final deltaE = 8.0 + rand.nextDouble() * 38.0; // 8 to 46 delta_E
-    final extractedL = 92.8 - (deltaE * 0.8);
-    final extractedA = -1.2 + (deltaE * 0.25);
-    final extractedB = 5.4 + (deltaE * 0.35);
+      // 2. Simulated OpenCV colorimetric extraction (CIE L*a*b* delta from virgin strip)
+      // DEBUG-ONLY demo path: Random representative exposure for demo simulation.
+      // Release builds never reach here (fail-closed above).
+      double deltaE;
+      double extractedL;
+      double extractedA;
+      double extractedB;
+      if (kDebugMode && _mockMode) {
+        final rand = Random();
+        deltaE = 8.0 + rand.nextDouble() * 38.0; // 8 to 46 delta_E
+        extractedL = 92.8 - (deltaE * 0.8);
+        extractedA = -1.2 + (deltaE * 0.25);
+        extractedB = 5.4 + (deltaE * 0.35);
+      } else {
+        // Unreachable today: placeholder until real image pipeline lands.
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Camera required: capture a badge image to analyze.')),
+        );
+        return;
+      }
 
-    // 3. AI / Calibration Model Inference (ONNX Runtime logic)
-    final result = OnnxDosimeterInference.predictExposure(
-      deltaE: deltaE,
-      ambientTempC: env.ambientTempC,
-      relativeHumidity: env.relativeHumidity,
-      exposureHours: 8.0,
-    );
-
-    // 4. Save to Offline-First SQLite Database
-    final record = ScanRecord(
-      clientUuid: const Uuid().v4(),
-      workerCode: _selectedWorker!.workerCode,
-      workerName: _selectedWorker!.workerName,
-      department: _selectedWorker!.department,
-      badgeUid: _selectedWorker!.badgeUid,
-      ambientTempC: env.ambientTempC,
-      relativeHumidity: env.relativeHumidity,
-      weatherSource: env.weatherSource,
-      extractedL: extractedL,
-      extractedA: extractedA,
-      extractedB: extractedB,
-      deltaE: deltaE,
-      exposureHours: 8.0,
-      cumulativeDosagePpmHr: result['cumulative_dosage_ppm_hr'] as double,
-      avgConcentrationPpm: result['avg_concentration_ppm'] as double,
-      complianceStatus: result['compliance_status'] as String,
-      dgmsCompliant: result['dgms_compliant'] as bool,
-      oisdCompliant: result['oisd_compliant'] as bool,
-      scannedAt: DateTime.now(),
-      isSynced: false,
-    );
-
-    await OfflineDatabase.instance.insertScan(record);
-
-    setState(() => _isProcessing = false);
-
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => ScanResultScreen(record: record)),
+      // 3. AI / Calibration Model Inference (analytical calibration model)
+      final result = OnnxDosimeterInference.predictExposure(
+        deltaE: deltaE,
+        ambientTempC: env.ambientTempC,
+        relativeHumidity: env.relativeHumidity,
+        exposureHours: 8.0,
       );
+
+      // 4. Save to Offline-First SQLite Database
+      final record = ScanRecord(
+        clientUuid: const Uuid().v4(),
+        workerCode: _selectedWorker!.workerCode,
+        workerName: _selectedWorker!.workerName,
+        department: _selectedWorker!.department,
+        badgeUid: _selectedWorker!.badgeUid,
+        ambientTempC: env.ambientTempC,
+        relativeHumidity: env.relativeHumidity,
+        weatherSource: env.weatherSource,
+        extractedL: extractedL,
+        extractedA: extractedA,
+        extractedB: extractedB,
+        deltaE: deltaE,
+        exposureHours: 8.0,
+        cumulativeDosagePpmHr: result['cumulative_dosage_ppm_hr'] as double,
+        avgConcentrationPpm: result['avg_concentration_ppm'] as double,
+        complianceStatus: result['compliance_status'] as String,
+        dgmsCompliant: result['dgms_compliant'] as bool,
+        oisdCompliant: result['oisd_compliant'] as bool,
+        scannedAt: DateTime.now(),
+        isSynced: false,
+      );
+
+      await OfflineDatabase.instance.insertScan(record);
+      if (!mounted) return;
+
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => ScanResultScreen(record: record)),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Capture failed: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      } else {
+        _isProcessing = false;
+      }
     }
   }
 

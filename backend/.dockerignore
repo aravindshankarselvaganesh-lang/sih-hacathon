@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.py[cod]
+*.db
+*.sqlite3
+.pytest_cache/
+.coverage
+htmlcov/
+.env
+.venv/
+venv/
+.git/
+.github/
+Dockerfile
+README.md

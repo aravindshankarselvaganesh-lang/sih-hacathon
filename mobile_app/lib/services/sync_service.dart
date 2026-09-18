@@ -1,15 +1,29 @@
+import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../database/offline_database.dart';
-import '../models/scan_record.dart';
+import 'app_config.dart';
 
 class SyncService {
-  final String backendBaseUrl;
+  /// Centralized base URL (inject via --dart-define=API_BASE_URL=...).
+  static const String apiBaseUrl = AppConfig.baseUrl;
 
-  SyncService({this.backendBaseUrl = 'http://10.0.2.2:8000/api/v1'});
+  final String backendBaseUrl;
+  final String? authToken;
+
+  SyncService({this.backendBaseUrl = apiBaseUrl, this.authToken});
+
+  Map<String, String> get _headers => {
+        'Content-Type': 'application/json',
+        // TODO: wire real auth (e.g. flutter_secure_storage token refresh).
+        if (authToken != null && authToken!.isNotEmpty)
+          'Authorization': 'Bearer $authToken',
+      };
 
   /// Synchronizes all pending local SQLite records to the central refinery PostgreSQL database.
-  Future<Map<String, dynamic>> syncPendingRecords() async {
+  /// Retries transient failures with exponential backoff (stub: [maxAttempts]).
+  Future<Map<String, dynamic>> syncPendingRecords({int maxAttempts = 3}) async {
     final pendingScans = await OfflineDatabase.instance.getPendingSyncRecords();
 
     if (pendingScans.isEmpty) {
@@ -18,7 +32,7 @@ class SyncService {
 
     try {
       final payload = {
-        'device_id': 'MOBILE_TERMINAL_01',
+        'device_id': AppConfig.deviceId,
         'records': pendingScans.map((r) => {
           'client_uuid': r.clientUuid,
           'worker_code': r.workerCode,
@@ -43,30 +57,105 @@ class SyncService {
         }).toList(),
       };
 
-      final response = await http.post(
-        Uri.parse('$backendBaseUrl/sync/batch'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(payload),
-      ).timeout(const Duration(seconds: 8));
+      http.Response? response;
+      // Exponential retry stub: retry transient network/5xx errors.
+      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          response = await http
+              .post(
+                Uri.parse('$backendBaseUrl/sync/batch'),
+                headers: _headers,
+                body: json.encode(payload),
+              )
+              .timeout(AppConfig.httpTimeout);
+          break; // got a response — per-status handling below decides retry
+        } on TimeoutException catch (e, stackTrace) {
+          debugPrint('Sync attempt $attempt/$maxAttempts timed out: $e');
+          debugPrint('$stackTrace');
+          if (attempt == maxAttempts) rethrow;
+          await Future.delayed(Duration(seconds: 1 << (attempt - 1)));
+        } catch (e) {
+          // Connection-level failure (DNS, refused, offline).
+          if (attempt == maxAttempts) rethrow;
+          debugPrint('Sync attempt $attempt/$maxAttempts failed: $e — retrying');
+          await Future.delayed(Duration(seconds: 1 << (attempt - 1)));
+        }
+      }
+      final res = response!;
 
-      if (response.statusCode == 200) {
-        final List<String> syncedUuids = pendingScans.map((s) => s.clientUuid).toList();
-        await OfflineDatabase.instance.markAsSynced(syncedUuids);
+      if (res.statusCode == 200) {
+        // TODO: parse per-record response (e.g. data['results'] with per-UUID
+        // accepted/rejected flags) and only mark accepted UUIDs as synced;
+        // currently falls back to whole-batch counts.
+        final data = json.decode(res.body) as Map<String, dynamic>;
+        final List<String> syncedUuids;
+        final accepted = data['accepted_uuids'] ?? data['synced_uuids'];
+        if (accepted is List) {
+          syncedUuids = accepted.map((e) => e.toString()).toList();
+        } else {
+          syncedUuids = pendingScans.map((s) => s.clientUuid).toList();
+        }
+        if (syncedUuids.isNotEmpty) {
+          await OfflineDatabase.instance.markAsSynced(syncedUuids);
+        }
 
-        final data = json.decode(response.body);
         return {
           'success': true,
           'synced_count': data['synced_count'] ?? syncedUuids.length,
           'message': data['message'] ?? 'Batch synced successfully',
         };
+      } else if (res.statusCode == 400) {
+        return {
+          'success': false,
+          'synced_count': 0,
+          'message': 'Sync bad request (HTTP 400): ${res.body}',
+        };
+      } else if (res.statusCode == 401) {
+        return {
+          'success': false,
+          'synced_count': 0,
+          'message': 'Sync unauthorized (HTTP 401). Sign in again.',
+        };
+      } else if (res.statusCode == 403) {
+        return {
+          'success': false,
+          'synced_count': 0,
+          'message': 'Sync forbidden (HTTP 403): device not provisioned.',
+        };
+      } else if (res.statusCode == 409) {
+        return {
+          'success': false,
+          'synced_count': 0,
+          'message': 'Sync conflict (HTTP 409): records already exist server-side.',
+        };
+      } else if (res.statusCode == 422) {
+        return {
+          'success': false,
+          'synced_count': 0,
+          'message': 'Sync validation failed (HTTP 422): ${res.body}',
+        };
+      } else if (res.statusCode == 429) {
+        return {
+          'success': false,
+          'synced_count': 0,
+          'message': 'Sync rate-limited (HTTP 429). Retry with backoff.',
+        };
+      } else if (res.statusCode >= 500) {
+        return {
+          'success': false,
+          'synced_count': 0,
+          'message': 'Server error (HTTP ${res.statusCode}). Will retry on next sync.',
+        };
       } else {
         return {
           'success': false,
           'synced_count': 0,
-          'message': 'Server rejected sync (HTTP ${response.statusCode})',
+          'message': 'Server rejected sync (HTTP ${res.statusCode})',
         };
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('SyncService.syncPendingRecords failed: $e');
+      debugPrint('$stackTrace');
       return {
         'success': false,
         'synced_count': 0,

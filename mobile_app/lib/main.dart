@@ -1,8 +1,25 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'database/offline_database.dart';
 import 'screens/dashboard_screen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint('FlutterError: ${details.exception}');
+    debugPrint('${details.stack}');
+  };
+
+  // Pre-warm offline-first SQLite so first screen never blocks on DB open.
+  try {
+    await OfflineDatabase.instance.database;
+  } catch (e, stack) {
+    debugPrint('OfflineDatabase pre-warm failed: $e');
+    debugPrint('$stack');
+  }
+
   runApp(const SulfScanApp());
 }
 

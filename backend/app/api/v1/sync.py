@@ -8,20 +8,28 @@ during plant operations in zero-connectivity or intrinsically safe shielded zone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime
+from sqlalchemy.exc import IntegrityError
+from datetime import datetime, timezone
+import logging
 
 from app.core.database import get_db
+from app.core.security import require_api_key
 from app.models.worker import Worker
 from app.models.scan_record import ScanRecord
 from app.schemas.scan import BatchSyncRequest, BatchSyncResponse
 
 router = APIRouter(prefix="/sync", tags=["Mobile Offline Sync"])
 
+logger = logging.getLogger(__name__)
+
+MAX_BATCH_RECORDS = 200
+
 
 @router.post("/batch", response_model=BatchSyncResponse)
 async def sync_offline_records(
     payload: BatchSyncRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_api_key),
 ):
     """
     Idempotent batch sync endpoint:
@@ -30,57 +38,97 @@ async def sync_offline_records(
     synced = 0
     rejected = 0
 
-    for rec in payload.records:
-        # Check if client_uuid already exists (idempotency guard)
-        existing = await db.execute(
-            select(ScanRecord).where(ScanRecord.client_uuid == rec.client_uuid)
+    if len(payload.records) > MAX_BATCH_RECORDS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Batch too large ({len(payload.records)} records). Max allowed is {MAX_BATCH_RECORDS}.",
         )
-        if existing.scalars().first():
+
+    for rec in payload.records:
+        try:
+            # Check if client_uuid already exists (idempotency guard)
+            existing = await db.execute(
+                select(ScanRecord).where(ScanRecord.client_uuid == rec.client_uuid)
+            )
+            if existing.scalars().first():
+                rejected += 1
+                continue
+
+            # Check or create worker
+            worker_res = await db.execute(
+                select(Worker).where(Worker.worker_code == rec.worker_code)
+            )
+            worker = worker_res.scalars().first()
+            if not worker:
+                worker = Worker(
+                    worker_code=rec.worker_code,
+                    name=f"Worker {rec.worker_code}",
+                    department="Plant Field Unit"
+                )
+                db.add(worker)
+                try:
+                    await db.flush()
+                except IntegrityError:
+                    await db.rollback()
+                    # Re-fetch worker created concurrently; use savepoint-style recovery
+                    worker_res = await db.execute(
+                        select(Worker).where(Worker.worker_code == rec.worker_code)
+                    )
+                    worker = worker_res.scalars().first()
+                    if not worker:
+                        rejected += 1
+                        continue
+
+            scan_item = ScanRecord(
+                client_uuid=rec.client_uuid,
+                worker_id=worker.id,
+                shift_type=rec.shift_type,
+                scan_event=rec.scan_event,
+                location_name=rec.location_name,
+                latitude=rec.latitude,
+                longitude=rec.longitude,
+                ambient_temp_c=rec.ambient_temp_c,
+                relative_humidity=rec.relative_humidity,
+                weather_source=rec.weather_source,
+                extracted_L=rec.extracted_L,
+                extracted_a=rec.extracted_a,
+                extracted_b=rec.extracted_b,
+                delta_E=rec.delta_E,
+                exposure_hours=rec.exposure_hours,
+                cumulative_dosage_ppm_hr=rec.cumulative_dosage_ppm_hr,
+                avg_concentration_ppm=rec.avg_concentration_ppm,
+                compliance_status=rec.compliance_status,
+                dgms_compliant=rec.dgms_compliant,
+                oisd_compliant=rec.oisd_compliant,
+                scanned_at=rec.scanned_at,
+                synced_at=datetime.now(timezone.utc)
+            )
+            db.add(scan_item)
+            try:
+                await db.flush()
+            except IntegrityError as exc:
+                await db.rollback()
+                logger.warning("Sync record IntegrityError (client_uuid=%s): %s", rec.client_uuid, exc)
+                rejected += 1
+                continue
+            synced += 1
+        except IntegrityError as exc:
+            await db.rollback()
+            logger.warning("Sync per-record IntegrityError: %s", exc)
+            rejected += 1
+            continue
+        except Exception as exc:
+            await db.rollback()
+            logger.exception("Sync per-record failed: %s", exc)
             rejected += 1
             continue
 
-        # Check or create worker
-        worker_res = await db.execute(
-            select(Worker).where(Worker.worker_code == rec.worker_code)
-        )
-        worker = worker_res.scalars().first()
-        if not worker:
-            worker = Worker(
-                worker_code=rec.worker_code,
-                name=f"Worker {rec.worker_code}",
-                department="Plant Field Unit"
-            )
-            db.add(worker)
-            await db.flush()
-
-        scan_item = ScanRecord(
-            client_uuid=rec.client_uuid,
-            worker_id=worker.id,
-            shift_type=rec.shift_type,
-            scan_event=rec.scan_event,
-            location_name=rec.location_name,
-            latitude=rec.latitude,
-            longitude=rec.longitude,
-            ambient_temp_c=rec.ambient_temp_c,
-            relative_humidity=rec.relative_humidity,
-            weather_source=rec.weather_source,
-            extracted_L=rec.extracted_L,
-            extracted_a=rec.extracted_a,
-            extracted_b=rec.extracted_b,
-            delta_E=rec.delta_E,
-            exposure_hours=rec.exposure_hours,
-            cumulative_dosage_ppm_hr=rec.cumulative_dosage_ppm_hr,
-            avg_concentration_ppm=rec.avg_concentration_ppm,
-            compliance_status=rec.compliance_status,
-            dgms_compliant=rec.dgms_compliant,
-            oisd_compliant=rec.oisd_compliant,
-            scanned_at=rec.scanned_at,
-            synced_at=datetime.utcnow()
-        )
-        db.add(scan_item)
-        synced += 1
-
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("Sync batch commit failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to commit sync batch.")
 
     return BatchSyncResponse(
         synced_count=synced,

@@ -12,23 +12,38 @@ dependencies:
   
   # Camera & One-Shot Capture
   camera: ^0.10.5+9
-  
+
   # Barcode / 2D DataMatrix (ZXing / MobileScanner)
+  # NOTE(unused): no `package:mobile_scanner` import yet — retained for
+  # planned DataMatrix badge-scan wiring; remove if ZXing path is dropped.
   mobile_scanner: ^5.1.1
-  
+
   # Offline-First Local Storage (SQLite)
   sqflite: ^2.3.2
   path: ^1.9.0
-  
+
   # Central Backend REST Sync
   http: ^1.2.0
-  
+
   # Location & Environmental Telemetry
+  # NOTE(unused): no `package:geolocator` import yet (WeatherService falls
+  # back to refinery baseline coords) — retained for planned live-GPS fusion.
   geolocator: ^11.0.0
-  
+
+  # Runtime permissions (camera/location) — required before enabling
+  # CameraService BarcodeService live GPS paths.
+  permission_handler: ^11.3.1
+  # PDF/audit persistence + offline connectivity awareness.
+  path_provider: ^2.1.2
+  connectivity_plus: ^6.0.3
+
   # UI & Formatting
   intl: ^0.19.0
+  # NOTE(unused): no `package:fl_chart` import yet — retained for planned
+  # exposure-trend charts; remove if not needed to shrink bundle.
   fl_chart: ^0.68.0
+  # NOTE(unused): no `package:cupertino_icons` import yet — default iOS
+  # icon set; safe to remove if Material icons suffice.
   cupertino_icons: ^1.0.6
   uuid: ^4.3.3
 

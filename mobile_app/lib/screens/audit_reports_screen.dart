@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../services/app_config.dart';
 
 class AuditReportsScreen extends StatefulWidget {
   const AuditReportsScreen({Key? key}) : super(key: key);
@@ -13,6 +14,7 @@ class _AuditReportsScreenState extends State<AuditReportsScreen> {
   String _statusMessage = 'Audit reports are auto-compiled via ReportLab on the central Python backend according to DGMS Regulation 124 and OISD-STD-105.';
 
   Future<void> _requestPdfReport() async {
+    if (!mounted) return;
     setState(() {
       _isDownloading = true;
       _statusMessage = 'Connecting to FastAPI backend & ReportLab PDF generator...';
@@ -20,25 +22,33 @@ class _AuditReportsScreenState extends State<AuditReportsScreen> {
 
     try {
       final response = await http.get(
-        Uri.parse('http://10.0.2.2:8000/api/v1/reports/dgms-oisd/pdf'),
-      ).timeout(const Duration(seconds: 8));
+        Uri.parse('${AppConfig.baseUrl}/reports/dgms-oisd/pdf'),
+      ).timeout(AppConfig.httpTimeout);
 
+      if (!mounted) return;
       if (response.statusCode == 200) {
+        // TODO(path_provider): persist response.bodyBytes via path_provider
+        // (getTemporaryDirectory()/getApplicationDocumentsDirectory + File.writeAsBytes)
+        // and open/share with open_filex/share_plus for statutory submission.
         setState(() {
-          _isDownloading = false;
           _statusMessage = 'Success! Received ${response.bodyBytes.length} bytes PDF audit certificate ready for statutory submission.';
+        });
+      } else if (response.statusCode == 401 || response.statusCode == 403) {
+        setState(() {
+          _statusMessage = 'Report request unauthorized (HTTP ${response.statusCode}). Sign in again.';
         });
       } else {
         setState(() {
-          _isDownloading = false;
-          _statusMessage = 'Report generated. (Backend response: HTTP ${response.statusCode})';
+          _statusMessage = 'Report request failed (HTTP ${response.statusCode}): ${response.body.isEmpty ? 'no details from server' : response.body}';
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _isDownloading = false;
         _statusMessage = 'Central server not reachable directly from this emulator. You can also generate the PDF directly from the FastAPI Swagger docs at http://localhost:8000/api/v1/reports/dgms-oisd/pdf';
       });
+    } finally {
+      if (mounted) setState(() => _isDownloading = false);
     }
   }
 

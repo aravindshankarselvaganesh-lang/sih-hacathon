@@ -1,4 +1,5 @@
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 
 class CameraService {
   CameraController? _controller;
@@ -29,8 +30,11 @@ class CameraService {
       // Lock focus and auto-exposure for macro badge photography
       await _controller!.setFocusMode(FocusMode.auto);
       _isInitialized = true;
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('CameraService.initialize failed: $e');
+      debugPrint('$stackTrace');
       _isInitialized = false;
+      rethrow;
     }
   }
 
@@ -39,7 +43,9 @@ class CameraService {
     try {
       final file = await _controller!.takePicture();
       return file;
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('CameraService.takeBadgePicture failed: $e');
+      debugPrint('$stackTrace');
       return null;
     }
   }
@@ -48,12 +54,19 @@ class CameraService {
     if (!isInitialized) return;
     try {
       await _controller!.setFlashMode(enable ? FlashMode.torch : FlashMode.off);
-    } catch (_) {}
+    } catch (e, stackTrace) {
+      debugPrint('CameraService.toggleFlash failed: $e');
+      debugPrint('$stackTrace');
+      rethrow;
+    }
   }
 
-  void dispose() {
-    _controller?.dispose();
-    _controller = null;
-    _isInitialized = false;
+  Future<void> dispose() async {
+    try {
+      await _controller?.dispose();
+    } finally {
+      _controller = null;
+      _isInitialized = false;
+    }
   }
 }

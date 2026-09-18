@@ -28,7 +28,7 @@ SULFSCAN is an industrial-grade occupational health and hazardous gas monitoring
 ## 2. Directory Structure
 
 ```
-sih/
+sih-hacathon-main/
 ├── backend/                                   # Central Backend, CV Engine, AI, Reports
 │   ├── app/
 │   │   ├── main.py                            # FastAPI entry point & CORS
@@ -44,7 +44,22 @@ sih/
 │   │       └── compliance_reportlab.py        # ReportLab DGMS & OISD PDF audit generator
 │   ├── tests/                                 # Pytest test suite
 │   ├── requirements.txt
+│   ├── Dockerfile                             # Backend container (python:3.11-slim, uvicorn app.main:app)
+│   ├── .dockerignore
+│   ├── .env.example                           # DATABASE_URL, OPENWEATHER_API_KEY, ENV, CORS_ORIGINS
 │   └── run_server.py                          # Server launcher script
+│
+├── sulfisafe/                                 # Web Dashboard (Vite + React + Supabase)
+│   ├── src/                                   # React source, supabaseClient.js
+│   ├── package.json                           # npm run build entry for CI
+│   ├── vercel.json
+│   └── dist/                                  # Production build output (ignored)
+│
+├── h2s-safety-monitor/                        # Web Monitor (Vite + React)
+│   ├── src/
+│   ├── package.json
+│   ├── vercel.json
+│   └── dist/                                  # Production build output (ignored)
 │
 ├── mobile_app/                                # Mobile App (Frontend) - Flutter (Dart)
 │   ├── pubspec.yaml                           # Flutter dependencies: camera, sqflite, http, etc.
@@ -55,10 +70,37 @@ sih/
 │       ├── services/                          # Camera, Barcode, Weather, ONNX, and Sync services
 │       └── screens/                           # Dashboard, ScanDosimeter, Result, History, Audit
 │
-└── ml_calibration/                            # AI / Calibration Model Tools
-    ├── export_onnx.py                         # Arrhenius chemical kinetics regression model
-    └── badge_color_chart.py                   # Standard colorimetry references & DGMS limits
+├── ml_calibration/                            # AI / Calibration Model Tools
+│   ├── export_onnx.py                         # Arrhenius chemical kinetics regression model
+│   └── badge_color_chart.py                   # Standard colorimetry references & DGMS limits
+│
+├── .vercel/                                   # Vercel deployment metadata (ignored)
+├── .github/workflows/ci.yml                   # CI: pytest backend + npm run build (sulfisafe)
+└── .gitignore                                 # Ignores dist/, .vercel/, *.db, __pycache__, .env, etc.
 ```
+
+> **Note — double-nested extraction:** this repo is distributed as a zip that
+> extracts to `sih-hacathon-main/sih-hacathon-main/` (double-nested folder).
+> If your path shows `.../sih-hacathon-main/sih-hacathon-main`, the inner
+> folder is the actual project root (contains `backend/`, `sulfisafe/`, `README.md`).
+
+### Environment Setup (Supabase / Vercel)
+
+Backend (`backend/.env`, see `backend/.env.example`):
+```bash
+DATABASE_URL=sqlite+aiosqlite:///./refinery_safety.db
+OPENWEATHER_API_KEY=
+ENV=dev
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+```
+
+Frontend (`sulfisafe/` / `h2s-safety-monitor/` on Vercel):
+- `VITE_SUPABASE_URL` — Supabase project URL
+- `VITE_SUPABASE_ANON_KEY` (a.k.a. `VITE_SUPABASE_KEY`) — Supabase publishable/anon key
+
+Set these in the Vercel dashboard (Project → Settings → Environment Variables)
+as well as in a local `.env` file for `vite dev`. `.vercel/` holds local
+Vercel CLI metadata and is intentionally git-ignored.
 
 ---
 
@@ -105,3 +147,69 @@ cd mobile_app
 flutter pub get
 flutter run
 ```
+
+---
+
+## 6. Production Deploy
+
+### Backend (uvicorn / Docker)
+
+```bash
+# 1. Configure environment
+cp backend/.env.example backend/.env
+# Edit backend/.env: DATABASE_URL, API_KEY, ENV=prod,
+# CORS_ORIGINS, OPENWEATHER_API_KEY
+
+# 2a. Run directly with uvicorn
+cd backend
+python -m pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# 2b. Or run with Docker (includes HEALTHCHECK on /healthz)
+cd backend
+docker build -t sulfscan-backend .
+docker run --rm -p 8000:8000 --env-file .env sulfscan-backend
+curl -f http://localhost:8000/healthz
+```
+
+> In `ENV=prod` the interactive docs (`/docs`, `/redoc`, `/openapi.json`)
+> are disabled automatically. Health probes: `GET /` and `GET /healthz`.
+
+### Frontend (Vercel)
+
+Deploy `sulfisafe/` (and/or `h2s-safety-monitor/`) to Vercel and set these
+environment variables in **Project → Settings → Environment Variables**:
+
+- `VITE_SUPABASE_URL` — Supabase project URL
+- `VITE_SUPABASE_ANON_KEY` (a.k.a. `VITE_SUPABASE_KEY`) — Supabase anon key
+
+```bash
+cd sulfisafe
+npm ci
+npm run build   # output: dist/
+```
+
+### Mobile (Flutter)
+
+Point the app at the deployed backend via `--dart-define`:
+
+```bash
+cd mobile_app
+flutter pub get
+flutter run --dart-define API_BASE_URL=https://<backend-host>/api/v1
+# Release build example:
+flutter build apk --release --dart-define API_BASE_URL=https://<backend-host>/api/v1
+```
+
+## 7. Security Note
+
+- **Rotate keys regularly:** `API_KEY`, `OPENWEATHER_API_KEY`, and the
+  Supabase anon/service keys. Never commit real values — only placeholders
+  in `backend/.env.example`. Production secrets live in the host env / Docker
+  `--env-file` / Vercel dashboard, never in git.
+- **Supabase RLS:** keep Row Level Security **enabled** on all tables holding
+  worker/scan data; grant least-privilege roles to anon/authenticated keys and
+  restrict service-role usage to server-side jobs only.
+- **CORS:** `CORS_ORIGINS` is explicit (no wildcard-with-credentials); set it
+  to the exact production frontend origin(s).
+- **Docs lockdown:** `ENV=prod` disables `/docs` and `/openapi.json`.

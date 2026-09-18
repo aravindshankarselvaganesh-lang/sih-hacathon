@@ -23,26 +23,46 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _loadHistory() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
-    final scans = await OfflineDatabase.instance.getAllScans();
-    setState(() {
-      _scans = scans;
-      _isLoading = false;
-    });
+    try {
+      final scans = await OfflineDatabase.instance.getAllScans();
+      if (!mounted) return;
+      setState(() {
+        _scans = scans;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load history: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _syncNow() async {
+    if (!mounted) return;
     setState(() => _isSyncing = true);
-    final result = await SyncService().syncPendingRecords();
-    setState(() => _isSyncing = false);
+    try {
+      final result = await SyncService().syncPendingRecords();
+      if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(result['message'] as String),
-        backgroundColor: (result['success'] as bool) ? Colors.green.shade700 : Colors.orange.shade800,
-      ),
-    );
-    _loadHistory();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] as String),
+          backgroundColor: (result['success'] as bool) ? Colors.green.shade700 : Colors.orange.shade800,
+        ),
+      );
+      await _loadHistory();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sync failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
   }
 
   Color _getStatusColor(String status) {
