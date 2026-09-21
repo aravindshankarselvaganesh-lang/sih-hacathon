@@ -632,6 +632,85 @@ export default function App() {
                   </div>
                 </button>
               </div>
+
+              {/* Presentation Demo Bar */}
+              <div
+                className="presentation-demo-strip"
+                style={{
+                  marginTop: "1.25rem",
+                  padding: "1rem",
+                  background: "rgba(15, 23, 42, 0.75)",
+                  border: "1px solid rgba(56, 189, 248, 0.25)",
+                  borderRadius: "0.85rem",
+                  textAlign: "center",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    marginBottom: "0.5rem",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "0.72rem",
+                      fontWeight: 800,
+                      letterSpacing: "0.5px",
+                      color: "#38bdf8",
+                      background: "rgba(56, 189, 248, 0.15)",
+                      padding: "2px 8px",
+                      borderRadius: "999px",
+                    }}
+                  >
+                    ⚡ PRESENTATION DEMO SHORTCUTS
+                  </span>
+                </div>
+                <p
+                  style={{
+                    fontSize: "0.78rem",
+                    color: "#94a3b8",
+                    margin: "0 0 0.75rem",
+                  }}
+                >
+                  Instant 1-click tools for evaluation & presentation
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "0.5rem",
+                    flexWrap: "wrap",
+                    justifyContent: "center",
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ fontSize: "0.8rem", padding: "0.45rem 0.85rem" }}
+                    onClick={() => setShowModal(true)}
+                  >
+                    🧪 3D Wristband Simulator
+                  </button>
+                  <a
+                    href="https://sulfisafe.vercel.app"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-secondary"
+                    style={{
+                      fontSize: "0.8rem",
+                      padding: "0.45rem 0.85rem",
+                      textDecoration: "none",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    🛡️ Open SulfiSafe Portal ↗
+                  </a>
+                </div>
+              </div>
             </div>
           )}
 

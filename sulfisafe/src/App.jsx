@@ -696,6 +696,27 @@ function Ga() {
       }
       (C(``), t(`adminDashboard`));
     },
+    handleDemoAdminLogin = () => {
+      C(``);
+      Ce(`Admin Demo Access`, `Logged into Safety Administrator Dashboard.`);
+      t(`adminDashboard`);
+    },
+    handleDemoWorkerLogin = (empId = `EMP-014`) => {
+      C(``);
+      let targetWorker =
+        i.find(
+          (e) =>
+            e.employeeId && e.employeeId.toUpperCase() === empId.toUpperCase(),
+        ) ||
+        i[0] ||
+        Ua;
+      s(targetWorker);
+      Ce(
+        `Worker Demo Access`,
+        `Logged in as ${targetWorker.fullName} (${targetWorker.employeeId}).`,
+      );
+      t(`employeeDashboard`);
+    },
     Ae = (e) => {
       e.preventDefault();
       let n = new FormData(e.target),
@@ -1141,6 +1162,64 @@ function Ga() {
                   }),
                 ],
               }),
+              (0, z.jsxs)(`div`, {
+                className: `presentation-demo-bar`,
+                children: [
+                  (0, z.jsxs)(`div`, {
+                    className: `presentation-demo-header`,
+                    children: [
+                      (0, z.jsx)(`span`, {
+                        className: `presentation-pill`,
+                        children: `⚡ PRESENTATION DEMO LOGIN`,
+                      }),
+                      (0, z.jsx)(`p`, {
+                        children: `1-Click instant login for hackathon presentation & evaluation`,
+                      }),
+                    ],
+                  }),
+                  (0, z.jsxs)(`div`, {
+                    className: `presentation-btn-row`,
+                    children: [
+                      (0, z.jsxs)(`button`, {
+                        type: `button`,
+                        className: `presentation-demo-btn worker-btn`,
+                        onClick: () => handleDemoWorkerLogin(`EMP-014`),
+                        children: [
+                          (0, z.jsx)(`span`, { children: `👷` }),
+                          (0, z.jsxs)(`div`, {
+                            children: [
+                              (0, z.jsx)(`strong`, {
+                                children: `Demo Worker Login`,
+                              }),
+                              (0, z.jsx)(`small`, {
+                                children: `EMP-014 · Karthik Raja`,
+                              }),
+                            ],
+                          }),
+                        ],
+                      }),
+                      (0, z.jsxs)(`button`, {
+                        type: `button`,
+                        className: `presentation-demo-btn admin-btn`,
+                        onClick: handleDemoAdminLogin,
+                        children: [
+                          (0, z.jsx)(`span`, { children: `🛡️` }),
+                          (0, z.jsxs)(`div`, {
+                            children: [
+                              (0, z.jsx)(`strong`, {
+                                children: `Demo Admin Login`,
+                              }),
+                              (0, z.jsx)(`small`, {
+                                children: `Safety Administrator`,
+                              }),
+                            ],
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                ],
+              }),
             ],
           }),
         ],
@@ -1203,16 +1282,50 @@ function Ga() {
                   }),
                 ],
               }),
-              // SECURITY: demo credentials hidden. Set VITE_SHOW_DEMO_HINT=true for local dev only.
-              import.meta.env.VITE_SHOW_DEMO_HINT === `true`
-                ? (0, z.jsxs)(`div`, {
-                    className: `demo-box`,
+              (0, z.jsxs)(`div`, {
+                className: `presentation-demo-bar login-demo-bar`,
+                children: [
+                  (0, z.jsxs)(`div`, {
+                    className: `presentation-demo-header`,
                     children: [
-                      (0, z.jsx)(`strong`, { children: `Demo Employee` }),
-                      (0, z.jsx)(`span`, { children: `Use your registered Employee ID` }),
+                      (0, z.jsx)(`span`, {
+                        className: `presentation-pill`,
+                        children: `⚡ PRESENTATION DEMO LOGIN`,
+                      }),
+                      (0, z.jsx)(`p`, {
+                        children: `Instant 1-Click login for judges & evaluators`,
+                      }),
                     ],
-                  })
-                : null,
+                  }),
+                  (0, z.jsxs)(`button`, {
+                    type: `button`,
+                    className: `presentation-demo-btn worker-btn full-width`,
+                    onClick: () => handleDemoWorkerLogin(`EMP-014`),
+                    children: [
+                      (0, z.jsx)(`span`, { children: `👷` }),
+                      (0, z.jsxs)(`div`, {
+                        children: [
+                          (0, z.jsx)(`strong`, {
+                            children: `Instant Demo: Karthik Raja (EMP-014)`,
+                          }),
+                          (0, z.jsx)(`small`, {
+                            children: `Sulfur Recovery Unit · 1-Click Access`,
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                  (0, z.jsxs)(`div`, {
+                    className: `presentation-creds-hint`,
+                    children: [
+                      `Manual: `,
+                      (0, z.jsx)(`code`, { children: `EMP-014` }),
+                      ` / `,
+                      (0, z.jsx)(`code`, { children: `Password@123` }),
+                    ],
+                  }),
+                ],
+              }),
             ],
           }),
         ],
@@ -1261,16 +1374,50 @@ function Ga() {
                   }),
                 ],
               }),
-              // SECURITY: demo credentials hidden. Set VITE_SHOW_DEMO_HINT=true for local dev only.
-              import.meta.env.VITE_SHOW_DEMO_HINT === `true`
-                ? (0, z.jsxs)(`div`, {
-                    className: `demo-box`,
+              (0, z.jsxs)(`div`, {
+                className: `presentation-demo-bar login-demo-bar`,
+                children: [
+                  (0, z.jsxs)(`div`, {
+                    className: `presentation-demo-header`,
                     children: [
-                      (0, z.jsx)(`strong`, { children: `Demo Administrator` }),
-                      (0, z.jsx)(`span`, { children: `Use your administrator credentials` }),
+                      (0, z.jsx)(`span`, {
+                        className: `presentation-pill`,
+                        children: `⚡ PRESENTATION DEMO LOGIN`,
+                      }),
+                      (0, z.jsx)(`p`, {
+                        children: `Instant 1-Click login for judges & evaluators`,
+                      }),
                     ],
-                  })
-                : null,
+                  }),
+                  (0, z.jsxs)(`button`, {
+                    type: `button`,
+                    className: `presentation-demo-btn admin-btn full-width`,
+                    onClick: handleDemoAdminLogin,
+                    children: [
+                      (0, z.jsx)(`span`, { children: `🛡️` }),
+                      (0, z.jsxs)(`div`, {
+                        children: [
+                          (0, z.jsx)(`strong`, {
+                            children: `Instant Demo: Safety Administrator`,
+                          }),
+                          (0, z.jsx)(`small`, {
+                            children: `Workforce Analytics & Real-Time Alerts`,
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                  (0, z.jsxs)(`div`, {
+                    className: `presentation-creds-hint`,
+                    children: [
+                      `Manual: `,
+                      (0, z.jsx)(`code`, { children: `admin` }),
+                      ` / `,
+                      (0, z.jsx)(`code`, { children: `SulfiSafe@123` }),
+                    ],
+                  }),
+                ],
+              }),
             ],
           }),
         ],
