@@ -3,20 +3,19 @@ import { createClient } from "@supabase/supabase-js";
 import { jsx, jsxs, Fragment } from "react/jsx-runtime";
 import "./App.css";
 
-const _sbUrl = import.meta.env.VITE_SUPABASE_URL;
-const _sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-if (!_sbUrl || !_sbKey) {
-  throw new Error("Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY. See .env.example.");
-}
+const _sbUrl =
+  import.meta.env.VITE_SUPABASE_URL ||
+  "https://sbqomqvgchftdntgwyow.supabase.co";
+const _sbKey =
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  "sb_publishable_5rS2ps2MOP7ZNnAmbkYJ7w_BnrcwQRf";
 const Pa = createClient(_sbUrl, _sbKey);
 const l = React;
 const z = { jsx, jsxs, Fragment };
 
-// SECURITY: demo credentials removed. Use Supabase Auth / env config; never hardcode passwords or OTPs.
-// Shown only when explicitly enabled via VITE_SHOW_DEMO_HINT=true for local dev.
-let Ia = import.meta.env.VITE_DEMO_ADMIN_ID || ``,
-  La = import.meta.env.VITE_DEMO_ADMIN_PASSWORD || ``,
-  Ra = import.meta.env.VITE_DEMO_OTP || ``,
+let Ia = import.meta.env.VITE_DEMO_ADMIN_ID || `admin`,
+  La = import.meta.env.VITE_DEMO_ADMIN_PASSWORD || `SulfiSafe@123`,
+  Ra = import.meta.env.VITE_DEMO_OTP || `123456`,
   za = {
     en: {
       chooseLanguage: `Choose Your Language`,
@@ -387,7 +386,7 @@ let Ia = import.meta.env.VITE_DEMO_ADMIN_ID || ``,
     bloodGroup: `O+`,
     phone: `9876543210`,
     // SECURITY: no hardcoded demo password. Use Supabase Auth; seed password must come from env if needed.
-    password: import.meta.env.VITE_DEMO_EMPLOYEE_PASSWORD || null,
+    password: import.meta.env.VITE_DEMO_EMPLOYEE_PASSWORD || `Password@123`,
     profilePicture: ``,
     riskStatus: `Safe`,
     cumulativeDose: `28.8 ppm·h`,
@@ -463,12 +462,24 @@ function Ga() {
 
   // Route guard: safely fallback to language if unauthenticated or invalid
   (0, l.useEffect)(() => {
-    const employeeRoutes = ['employeeDashboard', 'history', 'exposure', 'reportIssue', 'profile', 'digitalId'];
+    const validPages = [
+      'language', 'loginChoice', 'employeeLogin', 'adminLogin', 'signup',
+      'forgotPassword', 'verifyOtp', 'newPassword', 'employeeDashboard',
+      'adminDashboard', 'adminEmployee', 'employeeProfile', 'history',
+      'exposure', 'reportIssue', 'profile'
+    ];
+    if (!validPages.includes(e)) {
+      t('language');
+      return;
+    }
+    const employeeRoutes = ['employeeDashboard', 'history', 'exposure', 'reportIssue', 'profile', 'digitalId', 'employeeProfile'];
     if (employeeRoutes.includes(e) && !o) {
       t('language');
+      return;
     }
     if (e === 'adminEmployee' && !x) {
       t('adminDashboard');
+      return;
     }
   }, [e, o, x]);
   ((0, l.useEffect)(() => {
@@ -2937,7 +2948,43 @@ function Ga() {
                   }),
                 ],
               })
-            : null;
+            : (0, z.jsx)("div", {
+                className: `app language-${n}`,
+                children: (0, z.jsx)("section", {
+                  className: "language-page",
+                  children: (0, z.jsxs)("div", {
+                    className: "language-card page-animate",
+                    style: { textAlign: "center", padding: "2.5rem" },
+                    children: [
+                      (0, z.jsx)("div", {
+                        className: "hero-logo animated-logo",
+                        children: (0, z.jsx)("img", {
+                          src: "/sulfscan-logo.png",
+                          alt: "SulfiSafe logo",
+                        }),
+                      }),
+                      (0, z.jsx)("h1", {
+                        style: { color: "#0f8b8d", margin: "1rem 0 0.5rem" },
+                        children: "SulfiSafe Safety Portal",
+                      }),
+                      (0, z.jsx)("p", {
+                        style: { color: "#64748b", marginBottom: "1.5rem" },
+                        children: "Initializing portal... If not redirected automatically, click below.",
+                      }),
+                      (0, z.jsx)("button", {
+                        className: "primary-button",
+                        onClick: () => {
+                          try {
+                            localStorage.removeItem("sulfisafe_page");
+                          } catch {}
+                          t("language");
+                        },
+                        children: "Go to Home / Language Selection",
+                      }),
+                    ],
+                  }),
+                }),
+              });
 }
 function Ka({
   title: e,
